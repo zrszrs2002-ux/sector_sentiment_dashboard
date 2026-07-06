@@ -1,0 +1,51 @@
+{
+  "positive": [
+    "improved",
+    "stronger",
+    "healthy",
+    "resilient",
+    "supported",
+    "stable",
+    "better",
+    "growth",
+    "confidence",
+    "progress",
+    "attractive",
+    "steady",
+    "stabilized",
+    "supportive",
+    "lifted",
+    "healthy backlogs",
+    "remained firm"
+  ],
+  "negative": [
+    "pressure",
+    "concerns",
+    "risk",
+    "uncertainty",
+    "weak",
+    "softened",
+    "cautious",
+    "volatile",
+    "weighed",
+    "delays",
+    "scrutiny",
+    "overhang",
+    "loss",
+    "decline",
+    "strained",
+    "questions"
+  ],
+  "uncertainty": [
+    "uncertain",
+    "uncertainty",
+    "mixed",
+    "questions",
+    "visibility",
+    "watch point",
+    "monitor",
+    "could",
+    "may",
+    "volatile"
+  ]
+}

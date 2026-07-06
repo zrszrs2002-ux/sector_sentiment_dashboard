@@ -1,12 +1,13 @@
 import streamlit as st
 
-from src.data_loader import load_demo_articles
+from src.ui_helpers import load_selected_articles, url_column_config
 
 
-df = load_demo_articles()
+df, source_mode = load_selected_articles()
 
 st.title("文章浏览器")
-st.caption("当前显示第一阶段小型 demo 新闻。后续会接入完整处理后的 processed_articles.csv。")
+st.caption("当前显示已处理新闻；agg_weight 是聚合权重，不等同于板块级关注度。")
+st.caption(f"当前数据源：{source_mode}")
 
 source_options = sorted(df["source"].dropna().unique().tolist())
 sector_options = sorted(df["sector"].dropna().unique().tolist())
@@ -50,6 +51,7 @@ display_columns = [
     "optimism",
     "fear",
     "uncertainty",
+    "agg_weight",
     "risk_category",
     "risk_intensity",
     "evidence_sentence",
@@ -57,4 +59,9 @@ display_columns = [
 ]
 
 st.metric("筛选后新闻数量", len(filtered))
-st.dataframe(filtered[display_columns], use_container_width=True, hide_index=True)
+st.dataframe(
+    filtered[display_columns],
+    use_container_width=True,
+    hide_index=True,
+    column_config=url_column_config(),
+)

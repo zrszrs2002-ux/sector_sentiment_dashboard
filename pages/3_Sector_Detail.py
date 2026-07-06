@@ -5,7 +5,7 @@ import streamlit as st
 
 from src.aggregation import sector_metrics
 from src.config import METRIC_COLUMNS, METRIC_LABELS
-from src.data_loader import load_demo_articles
+from src.ui_helpers import load_selected_articles, url_column_config
 
 
 def split_values(series: pd.Series) -> pd.Series:
@@ -15,10 +15,11 @@ def split_values(series: pd.Series) -> pd.Series:
     return pd.Series(values)
 
 
-df = load_demo_articles()
+df, source_mode = load_selected_articles()
 sector_df = sector_metrics(df)
 
 st.title("板块详情")
+st.caption(f"当前数据源：{source_mode}")
 selected_sector = st.selectbox("选择板块", options=sector_df["sector"].tolist())
 sector_articles = df[df["sector"] == selected_sector].copy()
 sector_row = sector_df[sector_df["sector"] == selected_sector].iloc[0]
@@ -60,7 +61,7 @@ else:
         trend,
         x="published_date",
         y="sentiment_score",
-        title="当前小型 demo 每个板块只有 1 条新闻，完整趋势会在第二阶段扩展数据后展示。",
+        title="当前筛选结果不足以形成连续趋势。",
     )
 st.plotly_chart(trend_fig, use_container_width=True)
 
@@ -90,6 +91,7 @@ st.dataframe(
     ],
     use_container_width=True,
     hide_index=True,
+    column_config=url_column_config(),
 )
 
 st.subheader("Top negative news")
@@ -99,6 +101,7 @@ st.dataframe(
     ],
     use_container_width=True,
     hide_index=True,
+    column_config=url_column_config(),
 )
 
 st.subheader("Key evidence sentences")

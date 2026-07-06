@@ -4,8 +4,8 @@ import streamlit as st
 
 from src.aggregation import market_metrics, sector_metrics, top_articles
 from src.config import DISCLAIMER, METRIC_COLUMNS, METRIC_LABELS
-from src.data_loader import load_demo_articles
 from src.llm_summary import generate_market_brief
+from src.ui_helpers import load_selected_articles, url_column_config
 
 
 def render_radar(scores: dict[str, float], title: str) -> None:
@@ -30,7 +30,7 @@ def render_radar(scores: dict[str, float], title: str) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-df = load_demo_articles()
+df, source_mode = load_selected_articles()
 market_scores = market_metrics(df)
 sector_df = sector_metrics(df)
 
@@ -38,7 +38,8 @@ top_sector = sector_df.sort_values("optimism", ascending=False).iloc[0]["sector"
 risk_sector = sector_df.sort_values("risk_intensity", ascending=False).iloc[0]["sector"]
 
 st.title("市场总览")
-st.caption("第一阶段展示的是 demo 数据和页面框架，完整模型与聚合逻辑将在后续阶段实现。")
+st.caption("第四阶段已启用正式板块级聚合：新闻权重、分歧度、关注度和风险强度按规范计算。")
+st.caption(f"当前数据源：{source_mode}")
 st.warning(DISCLAIMER)
 
 metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -73,6 +74,6 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Top Market Drivers")
 drivers = top_articles(df, "risk_intensity", limit=5)[
-    ["title", "sector", "topic", "risk_category", "risk_intensity", "evidence_sentence"]
+    ["title", "sector", "topic", "risk_category", "risk_intensity", "evidence_sentence", "url"]
 ]
-st.dataframe(drivers, use_container_width=True, hide_index=True)
+st.dataframe(drivers, use_container_width=True, hide_index=True, column_config=url_column_config())

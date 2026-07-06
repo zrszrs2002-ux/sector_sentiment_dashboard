@@ -1,0 +1,38 @@
+{
+  "topics": [
+    {"topic": "AI demand", "sector_hint": "Technology", "keywords": ["AI demand", "AI server", "artificial intelligence", "accelerator"]},
+    {"topic": "semiconductors", "sector_hint": "Technology", "keywords": ["semiconductor", "chip", "GPU", "supply constraints"]},
+    {"topic": "cloud growth", "sector_hint": "Technology", "keywords": ["cloud growth", "cloud spending", "Azure", "server orders"]},
+    {"topic": "interest rate uncertainty", "sector_hint": "Utilities", "keywords": ["interest rate", "yield expectations", "rate pressure", "financing costs"]},
+    {"topic": "Fed decision", "sector_hint": "Financials", "keywords": ["Fed", "Federal Reserve", "policy rate"]},
+    {"topic": "oil price movement", "sector_hint": "Energy", "keywords": ["oil price", "crude", "energy prices"]},
+    {"topic": "earnings risk", "sector_hint": "", "keywords": ["earnings risk", "guidance", "margins", "revenue"]},
+    {"topic": "healthcare regulation", "sector_hint": "Healthcare", "keywords": ["healthcare regulation", "drug pricing", "reimbursement", "policy rules"]},
+    {"topic": "consumer spending", "sector_hint": "Consumer Discretionary", "keywords": ["consumer spending", "online sales", "restaurant traffic", "shoppers"]},
+    {"topic": "recession risk", "sector_hint": "Financials", "keywords": ["recession", "slowdown", "macro tape"]},
+    {"topic": "housing market", "sector_hint": "Real Estate", "keywords": ["housing market", "property values", "leasing", "REIT"]},
+    {"topic": "commodity shock", "sector_hint": "Materials", "keywords": ["commodity shock", "copper", "iron ore", "chemical margins"]},
+    {"topic": "credit risk", "sector_hint": "Financials", "keywords": ["credit risk", "loan loss", "credit quality", "reserves"]},
+    {"topic": "regulatory risk", "sector_hint": "", "keywords": ["regulatory", "policy scrutiny", "rate case"]},
+    {"topic": "defensive demand", "sector_hint": "Consumer Staples", "keywords": ["defensive", "essential goods", "staples demand"]},
+    {"topic": "supply chain", "sector_hint": "Industrials", "keywords": ["supply chain", "delivery delays", "order backlogs"]},
+    {"topic": "refinancing risk", "sector_hint": "Real Estate", "keywords": ["refinancing", "cap rates", "funding conditions"]},
+    {"topic": "advertising growth", "sector_hint": "Communication Services", "keywords": ["advertising demand", "digital advertising", "ad trends"]}
+    ,
+    {"topic": "streaming margins", "sector_hint": "Communication Services", "keywords": ["streaming competition", "streaming margins", "subscriber engagement"]},
+    {"topic": "subscriber trends", "sector_hint": "Communication Services", "keywords": ["subscriber trends", "subscriber engagement"]},
+    {"topic": "pricing power", "sector_hint": "Consumer Staples", "keywords": ["pricing power", "pricing actions", "consumer resistance"]},
+    {"topic": "margin pressure", "sector_hint": "Consumer Staples", "keywords": ["input cost pressure", "margin expansion", "margin pressure"]},
+    {"topic": "drug pipeline", "sector_hint": "Healthcare", "keywords": ["pipeline updates", "clinical trial", "future revenue"]},
+    {"topic": "policy uncertainty", "sector_hint": "Healthcare", "keywords": ["policy uncertainty", "pricing rules", "utilization trends"]},
+    {"topic": "capital spending", "sector_hint": "Industrials", "keywords": ["capital spending", "machinery", "order backlogs"]},
+    {"topic": "infrastructure demand", "sector_hint": "Industrials", "keywords": ["infrastructure demand", "medium-term guidance"]},
+    {"topic": "cash flow", "sector_hint": "Energy", "keywords": ["cash flow", "shareholders", "capital discipline"]},
+    {"topic": "geopolitical risk", "sector_hint": "Energy", "keywords": ["geopolitical", "supply concerns", "risk premiums"]},
+    {"topic": "renewable investment", "sector_hint": "Utilities", "keywords": ["renewable investment", "long-term growth"]},
+    {"topic": "dividend yield", "sector_hint": "Utilities", "keywords": ["dividend sectors", "dividend yield"]},
+    {"topic": "tenant demand", "sector_hint": "Real Estate", "keywords": ["tenant demand", "warehouse demand", "leasing activity"]},
+    {"topic": "industrial demand", "sector_hint": "Materials", "keywords": ["industrial demand", "weak demand", "chemical margins"]},
+    {"topic": "copper prices", "sector_hint": "Materials", "keywords": ["copper demand", "copper prices", "grid investment"]}
+  ]
+}

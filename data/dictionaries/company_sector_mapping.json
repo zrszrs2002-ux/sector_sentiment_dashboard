@@ -1,0 +1,70 @@
+{
+  "companies": [
+    {"company": "Apple", "ticker": "AAPL", "sector": "Technology", "aliases": ["Apple", "Apple Inc", "iPhone maker"]},
+    {"company": "Microsoft", "ticker": "MSFT", "sector": "Technology", "aliases": ["Microsoft", "Azure"]},
+    {"company": "Nvidia", "ticker": "NVDA", "sector": "Technology", "aliases": ["Nvidia", "NVIDIA"]},
+    {"company": "AMD", "ticker": "AMD", "sector": "Technology", "aliases": ["AMD", "Advanced Micro Devices"]},
+    {"company": "Broadcom", "ticker": "AVGO", "sector": "Technology", "aliases": ["Broadcom", "AVGO"]},
+
+    {"company": "Meta", "ticker": "META", "sector": "Communication Services", "aliases": ["Meta", "Facebook"]},
+    {"company": "Alphabet", "ticker": "GOOGL", "sector": "Communication Services", "aliases": ["Alphabet", "Google"]},
+    {"company": "Netflix", "ticker": "NFLX", "sector": "Communication Services", "aliases": ["Netflix"]},
+    {"company": "AT&T", "ticker": "T", "sector": "Communication Services", "aliases": ["AT&T", "AT and T"]},
+    {"company": "Verizon", "ticker": "VZ", "sector": "Communication Services", "aliases": ["Verizon"]},
+
+    {"company": "Amazon", "ticker": "AMZN", "sector": "Consumer Discretionary", "aliases": ["Amazon"]},
+    {"company": "Tesla", "ticker": "TSLA", "sector": "Consumer Discretionary", "aliases": ["Tesla"]},
+    {"company": "Nike", "ticker": "NKE", "sector": "Consumer Discretionary", "aliases": ["Nike"]},
+    {"company": "Home Depot", "ticker": "HD", "sector": "Consumer Discretionary", "aliases": ["Home Depot"]},
+    {"company": "McDonald's", "ticker": "MCD", "sector": "Consumer Discretionary", "aliases": ["McDonald's", "McDonalds"]},
+
+    {"company": "Walmart", "ticker": "WMT", "sector": "Consumer Staples", "aliases": ["Walmart"]},
+    {"company": "Coca-Cola", "ticker": "KO", "sector": "Consumer Staples", "aliases": ["Coca-Cola", "Coca Cola", "Coke"]},
+    {"company": "Procter & Gamble", "ticker": "PG", "sector": "Consumer Staples", "aliases": ["Procter & Gamble", "P&G"]},
+    {"company": "Costco", "ticker": "COST", "sector": "Consumer Staples", "aliases": ["Costco"]},
+
+    {"company": "JPMorgan", "ticker": "JPM", "sector": "Financials", "aliases": ["JPMorgan", "JPMorgan Chase"]},
+    {"company": "Bank of America", "ticker": "BAC", "sector": "Financials", "aliases": ["Bank of America", "BofA"]},
+    {"company": "Citigroup", "ticker": "C", "sector": "Financials", "aliases": ["Citigroup", "Citi"]},
+    {"company": "Goldman Sachs", "ticker": "GS", "sector": "Financials", "aliases": ["Goldman Sachs", "Goldman"]},
+
+    {"company": "Pfizer", "ticker": "PFE", "sector": "Healthcare", "aliases": ["Pfizer"]},
+    {"company": "Johnson & Johnson", "ticker": "JNJ", "sector": "Healthcare", "aliases": ["Johnson & Johnson", "J&J"]},
+    {"company": "Merck", "ticker": "MRK", "sector": "Healthcare", "aliases": ["Merck"]},
+    {"company": "UnitedHealth", "ticker": "UNH", "sector": "Healthcare", "aliases": ["UnitedHealth", "UnitedHealth Group"]},
+
+    {"company": "Boeing", "ticker": "BA", "sector": "Industrials", "aliases": ["Boeing"]},
+    {"company": "Caterpillar", "ticker": "CAT", "sector": "Industrials", "aliases": ["Caterpillar"]},
+    {"company": "GE", "ticker": "GE", "sector": "Industrials", "aliases": ["GE", "General Electric"]},
+    {"company": "3M", "ticker": "MMM", "sector": "Industrials", "aliases": ["3M"]},
+
+    {"company": "ExxonMobil", "ticker": "XOM", "sector": "Energy", "aliases": ["ExxonMobil", "Exxon"]},
+    {"company": "Chevron", "ticker": "CVX", "sector": "Energy", "aliases": ["Chevron"]},
+    {"company": "ConocoPhillips", "ticker": "COP", "sector": "Energy", "aliases": ["ConocoPhillips"]},
+
+    {"company": "NextEra Energy", "ticker": "NEE", "sector": "Utilities", "aliases": ["NextEra Energy", "NextEra"]},
+    {"company": "Duke Energy", "ticker": "DUK", "sector": "Utilities", "aliases": ["Duke Energy"]},
+    {"company": "Southern Company", "ticker": "SO", "sector": "Utilities", "aliases": ["Southern Company"]},
+
+    {"company": "Prologis", "ticker": "PLD", "sector": "Real Estate", "aliases": ["Prologis"]},
+    {"company": "Simon Property", "ticker": "SPG", "sector": "Real Estate", "aliases": ["Simon Property", "Simon Property Group"]},
+    {"company": "Realty Income", "ticker": "O", "sector": "Real Estate", "aliases": ["Realty Income"]},
+
+    {"company": "BHP", "ticker": "BHP", "sector": "Materials", "aliases": ["BHP"]},
+    {"company": "Freeport-McMoRan", "ticker": "FCX", "sector": "Materials", "aliases": ["Freeport-McMoRan", "Freeport McMoRan"]},
+    {"company": "Dow", "ticker": "DOW", "sector": "Materials", "aliases": ["Dow", "Dow Inc"]}
+  ],
+  "sector_keywords": {
+    "Technology": ["AI", "cloud", "chip", "semiconductor", "software", "server"],
+    "Communication Services": ["advertising", "streaming", "subscriber", "telecom", "platform"],
+    "Consumer Discretionary": ["consumer spending", "auto demand", "restaurant", "retail traffic", "online sales"],
+    "Consumer Staples": ["essential goods", "groceries", "staples", "pricing power", "membership"],
+    "Financials": ["bank", "credit", "loan", "capital markets", "net interest income"],
+    "Healthcare": ["drug", "clinical trial", "managed care", "healthcare", "pricing rules"],
+    "Industrials": ["machinery", "aircraft", "delivery delays", "infrastructure", "orders"],
+    "Energy": ["oil", "crude", "gas", "cash flow", "geopolitical supply"],
+    "Utilities": ["dividend", "renewable", "rate case", "yield", "financing costs"],
+    "Real Estate": ["REIT", "leasing", "property", "warehouse demand", "refinancing"],
+    "Materials": ["copper", "chemical", "iron ore", "commodity", "mining"]
+  }
+}

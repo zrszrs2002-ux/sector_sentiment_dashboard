@@ -1,0 +1,14 @@
+{
+  "risks": [
+    {"risk_category": "macro risk", "keywords": ["macro", "recession", "slowdown", "inflation", "economic uncertainty"]},
+    {"risk_category": "interest rate risk", "keywords": ["interest rate", "yield", "rate pressure", "financing costs", "policy rate"]},
+    {"risk_category": "regulatory risk", "keywords": ["regulatory", "regulation", "policy scrutiny", "pricing rules", "rate case"]},
+    {"risk_category": "earnings risk", "keywords": ["earnings risk", "guidance", "margin pressure", "revenue risk", "execution"]},
+    {"risk_category": "valuation risk", "keywords": ["valuation", "rally", "cap rates", "property values", "multiple"]},
+    {"risk_category": "liquidity risk", "keywords": ["liquidity", "refinancing", "funding", "capital access"]},
+    {"risk_category": "credit risk", "keywords": ["credit risk", "credit quality", "loan loss", "reserves", "consumer lending"]},
+    {"risk_category": "geopolitical risk", "keywords": ["geopolitical", "export uncertainty", "supply concerns", "sanctions"]},
+    {"risk_category": "commodity risk", "keywords": ["commodity", "oil price", "crude", "copper", "iron ore", "input cost"]},
+    {"risk_category": "demand risk", "keywords": ["demand risk", "softened", "weak demand", "traffic", "order visibility"]}
+  ]
+}

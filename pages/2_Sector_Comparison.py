@@ -4,14 +4,15 @@ import streamlit as st
 
 from src.aggregation import sector_metrics
 from src.config import METRIC_COLUMNS, METRIC_LABELS
-from src.data_loader import load_demo_articles
+from src.ui_helpers import load_selected_articles
 
 
-df = load_demo_articles()
+df, source_mode = load_selected_articles()
 sector_df = sector_metrics(df)
 
 st.title("板块比较")
-st.caption("比较 11 个板块的 demo 六维指标。后续阶段会加入正式聚合权重。")
+st.caption("比较 11 个板块的六维指标；关注度为近 7 天加权新闻量排名分位数，分歧度为加权情绪标准差。")
+st.caption(f"当前数据源：{source_mode}")
 
 selected_sectors = st.multiselect(
     "选择要叠加到雷达图的板块",
@@ -54,7 +55,7 @@ col1, col2, col3, col4, col5 = st.columns(5)
 col1.dataframe(sector_df.nlargest(5, "optimism")[["sector", "optimism"]], hide_index=True)
 col2.dataframe(sector_df.nlargest(5, "fear")[["sector", "fear"]], hide_index=True)
 col3.dataframe(sector_df.nlargest(5, "uncertainty")[["sector", "uncertainty"]], hide_index=True)
-col4.dataframe(sector_df.nlargest(5, "disagreement_input")[["sector", "disagreement_input"]], hide_index=True)
+col4.dataframe(sector_df.nlargest(5, "disagreement")[["sector", "disagreement"]], hide_index=True)
 col5.dataframe(sector_df.nlargest(5, "risk_intensity")[["sector", "risk_intensity"]], hide_index=True)
 
 st.subheader("板块指标表")
