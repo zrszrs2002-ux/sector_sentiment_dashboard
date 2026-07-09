@@ -20,8 +20,11 @@ WORD_BOUNDARY_TEMPLATE = r"(?<![A-Za-z0-9]){term}(?![A-Za-z0-9])"
 @lru_cache(maxsize=1)
 def load_company_mapping() -> dict:
     path = DICTIONARY_DIR / "company_sector_mapping.json"
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {"companies": [], "sector_keywords": {}}
 
 
 def normalize_text(text: str) -> str:

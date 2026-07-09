@@ -26,19 +26,25 @@ class TagResult:
 @lru_cache(maxsize=1)
 def load_topic_rules() -> list[dict]:
     path = DICTIONARY_DIR / "topic_keywords.json"
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)["topics"]
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)["topics"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return []
 
 
 @lru_cache(maxsize=1)
 def load_risk_rules() -> list[dict]:
     path = DICTIONARY_DIR / "risk_keywords.json"
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)["risks"]
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)["risks"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return []
 
 
 def split_sentences(text: str) -> list[str]:
-    """轻量分句，避免为 demo 模式引入 nltk 依赖。"""
+    """轻量分句，避免为本地运行引入 nltk 依赖。"""
     compact = re.sub(r"\s+", " ", str(text or "")).strip()
     if not compact:
         return []

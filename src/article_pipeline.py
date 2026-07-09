@@ -1,18 +1,28 @@
 """文章处理流水线。
 
-把第二阶段的原始 demo CSV 转换为第三阶段的结构化新闻输出：
-公司/ticker/板块映射、主题标签、风险标签、词典情绪 fallback 和文章级基础分数。
+把原始新闻 CSV 转换为结构化新闻输出：公司/ticker/板块映射、主题标签、
+风险标签、词典情绪 fallback 和文章级基础分数。
 """
 
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-from src.config import DATA_DIR, EXPECTED_ARTICLE_COLUMNS, RELEVANCE_WEIGHTS
+from src.config import (
+    DATA_DIR,
+    DEMO_PROCESSED_ARTICLES_PATH,
+    ERROR_RECORDS_PATH,
+    EXPECTED_ARTICLE_COLUMNS,
+    REAL_PROCESSED_ARTICLES_PATH,
+    RELEVANCE_WEIGHTS,
+)
+from src.daily_snapshots import write_daily_snapshots
+from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL
 from src.mapping import map_article
 from src.preprocessing import preprocess_records, read_article_csv, write_article_csv
 from src.scoring import score_article
-from src.sentiment_model import analyze_article_sentiment
+from src.sentiment_model import ArticleSentiment, analyze_article_sentiment, analyze_articles_sentiment
 from src.topic_risk_tagger import split_sentences, tag_article
 
 
@@ -45,8 +55,37 @@ def join_sentence_parts(parts: list[str]) -> str:
     return " ".join(normalized_parts)
 
 
+def split_semicolon_values(value: str) -> list[str]:
+    return [item.strip() for item in str(value or "").split(";") if item.strip()]
+
+
+def merge_semicolon_values(*values: str) -> str:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for item in split_semicolon_values(value):
+            key = item.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return ";".join(merged)
+
+
 def article_text(record: dict[str, str]) -> str:
     return join_sentence_parts(article_parts(record, ["title", "summary", "content"]))
+
+
+def mapping_text(record: dict[str, str]) -> str:
+    raw_context = " ".join(
+        item
+        for item in [
+            str(record.get("companies", "") or "").replace(";", " "),
+            str(record.get("tickers", "") or "").replace(";", " "),
+        ]
+        if item.strip()
+    )
+    return " ".join([article_text(record), raw_context]).strip()
 
 
 def article_body_text(record: dict[str, str]) -> str:
@@ -104,19 +143,20 @@ def choose_evidence_sentence(record: dict[str, str], tag_result, sentiment) -> s
     return title
 
 
-def enrich_record(record: dict[str, str]) -> dict[str, str]:
+def enrich_record(record: dict[str, str], sentiment: ArticleSentiment | None = None) -> dict[str, str]:
     text = article_text(record)
-    mapping_result = map_article(text)
+    mapping_result = map_article(mapping_text(record))
     tag_result = tag_article(text)
-    sentiment = analyze_article_sentiment(
-        record.get("title", ""),
-        record.get("summary", ""),
-        record.get("content", ""),
-    )
+    if sentiment is None:
+        sentiment = analyze_article_sentiment(
+            record.get("title", ""),
+            record.get("summary", ""),
+            record.get("content", ""),
+        )
 
     sector = mapping_result["sector"]
-    companies = mapping_result["companies"] or record.get("companies", "")
-    tickers = mapping_result["tickers"] or record.get("tickers", "")
+    companies = merge_semicolon_values(mapping_result["companies"], record.get("companies", ""))
+    tickers = merge_semicolon_values(mapping_result["tickers"], record.get("tickers", ""))
     relevance_weight = float(mapping_result["relevance_weight"])
     if sector == "Unmapped" and record.get("sector"):
         sector = record.get("sector", "")
@@ -150,14 +190,146 @@ def enrich_record(record: dict[str, str]) -> dict[str, str]:
     return enriched
 
 
+def error_record(record: dict[str, str], error: Exception) -> dict[str, str]:
+    fallback = {column: record.get(column, "") for column in EXPECTED_ARTICLE_COLUMNS}
+    fallback.update(
+        {
+            "sector": record.get("sector", "") or "Unmapped",
+            "topic": record.get("topic", "") or "processing error",
+            "sentiment_score": "0.000",
+            "p_positive": "0.000",
+            "p_neutral": "1.000",
+            "p_negative": "0.000",
+            "optimism": "0.0",
+            "fear": "0.0",
+            "uncertainty": "100.0",
+            "attention": "0.0",
+            "attention_weight": "0.0",
+            "disagreement": "0.0",
+            "disagreement_input": "0.000",
+            "risk_intensity": "0.0",
+            "risk_category": record.get("risk_category", "") or "processing error",
+            "evidence_sentence": record.get("summary", "") or record.get("title", ""),
+            "model_confidence": "0.000",
+            "relevance_weight": "0.000",
+            "time_weight": "0.000000",
+            "agg_weight": "0.000000",
+            "processing_error": f"{type(error).__name__}: {error}"[:500],
+        }
+    )
+    return fallback
+
+
+def enrich_records_batch(records: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    sentiment_inputs = [
+        (
+            record.get("title", ""),
+            record.get("summary", ""),
+            record.get("content", ""),
+        )
+        for record in records
+    ]
+    sentiment_results = analyze_articles_sentiment(sentiment_inputs) if sentiment_inputs else []
+    enriched_records: list[dict[str, str]] = []
+    error_records: list[dict[str, str]] = []
+
+    for record, sentiment in zip(records, sentiment_results, strict=True):
+        try:
+            enriched_records.append(enrich_record(record, sentiment))
+        except Exception as exc:  # noqa: BLE001 - 单条失败不应中断整批处理
+            fallback = error_record(record, exc)
+            enriched_records.append(fallback)
+            error_records.append(fallback)
+
+    return enriched_records, error_records
+
+
+def data_source_for_output_path(output_path: Path) -> str:
+    resolved = Path(output_path).resolve()
+    if resolved == REAL_PROCESSED_ARTICLES_PATH.resolve():
+        return REAL_DATA_LABEL
+    if resolved == DEMO_PROCESSED_ARTICLES_PATH.resolve():
+        return DEMO_DATA_LABEL
+    return str(output_path)
+
+
+def write_pipeline_outputs(output_path: Path, records: list[dict[str, str]], data_source: str) -> None:
+    write_article_csv(output_path, records)
+    write_article_csv(ERROR_RECORDS_PATH, [record for record in records if record.get("processing_error")])
+    write_daily_snapshots(records, data_source)
+
+
 def process_articles(input_path=None, output_path=None) -> list[dict[str, str]]:
     input_path = input_path or DATA_DIR / "demo_articles.csv"
     output_path = output_path or DATA_DIR / "processed_articles.csv"
+    output_path = Path(output_path)
     raw_records = read_article_csv(input_path)
     deduped_records = preprocess_records(raw_records)
-    enriched_records = [enrich_record(record) for record in deduped_records]
+    sentiment_inputs = [
+        (
+            record.get("title", ""),
+            record.get("summary", ""),
+            record.get("content", ""),
+        )
+        for record in deduped_records
+    ]
+    sentiment_results = analyze_articles_sentiment(sentiment_inputs) if sentiment_inputs else []
+    enriched_records: list[dict[str, str]] = []
+    error_records: list[dict[str, str]] = []
+
+    for record, sentiment in zip(deduped_records, sentiment_results, strict=True):
+        try:
+            enriched_records.append(enrich_record(record, sentiment))
+        except Exception as exc:  # noqa: BLE001 - 单条新闻失败不能中断整批处理
+            fallback = error_record(record, exc)
+            enriched_records.append(fallback)
+            error_records.append(fallback)
+
     write_article_csv(output_path, enriched_records)
+    write_article_csv(ERROR_RECORDS_PATH, error_records)
+    write_daily_snapshots(enriched_records, data_source_for_output_path(output_path))
     return enriched_records
+
+
+def process_articles_incremental(input_path, output_path, new_raw_records=None) -> dict[str, object]:
+    output_path = Path(output_path)
+    raw_records = read_article_csv(input_path)
+    existing_records = read_article_csv(output_path)
+    processed_ids = {
+        str(record.get("article_id", "")).strip()
+        for record in existing_records
+        if str(record.get("article_id", "")).strip()
+    }
+
+    deduped_records = preprocess_records(raw_records)
+    candidate_records = [
+        record
+        for record in deduped_records
+        if str(record.get("article_id", "")).strip() not in processed_ids
+    ]
+    enriched_new_records, _error_records = enrich_records_batch(candidate_records)
+
+    merged_by_id: dict[str, dict[str, str]] = {}
+    ordered_ids: list[str] = []
+    for record in existing_records + enriched_new_records:
+        article_id = str(record.get("article_id", "")).strip()
+        if not article_id:
+            article_id = f"missing-{len(ordered_ids)}"
+        if article_id not in merged_by_id:
+            ordered_ids.append(article_id)
+        merged_by_id[article_id] = record
+    merged_records = [merged_by_id[article_id] for article_id in ordered_ids]
+
+    write_pipeline_outputs(output_path, merged_records, data_source_for_output_path(output_path))
+    new_count = len(enriched_new_records)
+    reused_count = len(existing_records)
+    print(f"增量处理完成：本次新增 {new_count} 条，复用 {reused_count} 条。")
+    return {
+        "records": merged_records,
+        "new_count": new_count,
+        "reused_count": reused_count,
+        "total_count": len(merged_records),
+    }
 
 
 def main() -> None:

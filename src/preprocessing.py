@@ -1,44 +1,74 @@
 """数据预处理工具。
 
-第二阶段先实现稳定的 UTC 时间标准化和基础去重。后续真实新闻抓取、
-正文清洗、分句和相似文本聚类会继续在本模块扩展。
+负责 UTC 时间标准化、解析错误留档、基础去重和安全 CSV 写入。
 """
 
 from __future__ import annotations
 
 import csv
 import re
+import shutil
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from src.config import DEFAULT_DEDUP_FACTORS, EXPECTED_ARTICLE_COLUMNS
+from src.config import (
+    BACKUP_RETENTION_COUNT,
+    CSV_EXPORT_ENCODING,
+    DEFAULT_DEDUP_FACTORS,
+    EXPECTED_ARTICLE_COLUMNS,
+    SIMILAR_PREFIX_TOKEN_COUNT,
+    SIMILAR_TITLE_THRESHOLD,
+)
 
-
-UTC_TIME_COLUMNS = ["published_at", "collected_at"]
-SIMILAR_TITLE_THRESHOLD = 0.9
-SIMILAR_PREFIX_TOKEN_COUNT = 5
-
-
-def parse_utc_datetime(value: str) -> datetime:
-    """把输入时间解析为 UTC datetime。解析失败时使用当前 UTC 时间兜底。"""
+def parse_utc_datetime(value: object) -> datetime:
+    """把输入时间解析为 UTC datetime；解析失败时显式抛错，避免污染时间权重。"""
     if not value:
-        return datetime.now(UTC)
+        raise ValueError("empty datetime")
 
-    normalized = str(value).strip().replace("Z", "+00:00")
-    try:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        normalized = str(value).strip().replace("Z", "+00:00")
         parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return datetime.now(UTC)
 
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
 
 
-def format_utc_datetime(value: str) -> str:
+def format_utc_datetime(value: object) -> str:
     """统一输出 ISO 8601 UTC 时间字符串。"""
     return parse_utc_datetime(value).isoformat(timespec="seconds")
+
+
+def format_utc_datetime_or_fallback(value: object, fallback: datetime) -> tuple[str, str]:
+    """返回标准化 UTC 时间和解析错误；fallback 会被记录，不再静默伪装成原始时间。"""
+    try:
+        return format_utc_datetime(value), ""
+    except (TypeError, ValueError) as exc:
+        return fallback.astimezone(UTC).isoformat(timespec="seconds"), str(exc)
+
+
+def normalize_record_times(record: dict[str, str]) -> None:
+    errors: list[str] = []
+    now = datetime.now(UTC)
+
+    collected_at, collected_error = format_utc_datetime_or_fallback(record.get("collected_at", ""), now)
+    if collected_error:
+        errors.append(f"collected_at: {collected_error}; fallback=current_utc")
+    record["collected_at"] = collected_at
+
+    collected_dt = parse_utc_datetime(collected_at)
+    published_at, published_error = format_utc_datetime_or_fallback(record.get("published_at", ""), collected_dt)
+    if published_error:
+        errors.append(f"published_at: {published_error}; fallback=collected_at")
+    record["published_at"] = published_at
+
+    existing_error = str(record.get("time_parse_error", "") or "").strip()
+    all_errors = [existing_error] if existing_error else []
+    all_errors.extend(errors)
+    record["time_parse_error"] = "; ".join(all_errors)
 
 
 def normalize_title(title: str) -> str:
@@ -84,8 +114,7 @@ def preprocess_records(records: list[dict[str, str]]) -> list[dict[str, str]]:
     for raw_record in records:
         record = ensure_article_columns(raw_record)
 
-        for column in UTC_TIME_COLUMNS:
-            record[column] = format_utc_datetime(record[column])
+        normalize_record_times(record)
 
         url_key = str(record.get("url", "")).strip().lower()
         title_key = normalize_title(record.get("title", ""))
@@ -116,17 +145,84 @@ def preprocess_records(records: list[dict[str, str]]) -> list[dict[str, str]]:
 
 def read_article_csv(path: Path) -> list[dict[str, str]]:
     """读取文章 CSV。"""
-    with path.open("r", encoding="utf-8-sig", newline="") as file:
-        return list(csv.DictReader(file))
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as file:
+            return list(csv.DictReader(file))
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return []
+
+
+def normalize_csv_record(fieldnames: list[str], record: dict[str, object]) -> dict[str, object]:
+    return {column: record.get(column, "") for column in fieldnames}
+
+
+def write_csv_atomic(path: Path, fieldnames: list[str], records: list[dict[str, object]]) -> None:
+    """Atomically write a CSV with backups and per-source retention."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    temp_path = path.with_name(f".{path.name}.{timestamp}.tmp")
+
+    try:
+        with temp_path.open("w", encoding=CSV_EXPORT_ENCODING, newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows([normalize_csv_record(fieldnames, record) for record in records])
+
+        if path.exists() and path.stat().st_size > 0:
+            backup_dir = path.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_path = backup_dir / f"{path.stem}.{timestamp}.bak{path.suffix}"
+            shutil.copy2(path, backup_path)
+            prune_backups(path, backup_dir)
+
+        temp_path.replace(path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
 
 
 def write_article_csv(path: Path, records: list[dict[str, str]]) -> None:
-    """按固定字段顺序写出文章 CSV。"""
+    """按固定字段顺序原子写出 CSV；替换前保留备份，降低历史数据丢失风险。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=EXPECTED_ARTICLE_COLUMNS)
-        writer.writeheader()
-        writer.writerows([ensure_article_columns(record) for record in records])
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    temp_path = path.with_name(f".{path.name}.{timestamp}.tmp")
+
+    try:
+        with temp_path.open("w", encoding=CSV_EXPORT_ENCODING, newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=EXPECTED_ARTICLE_COLUMNS)
+            writer.writeheader()
+            writer.writerows([ensure_article_columns(record) for record in records])
+
+        if path.exists() and path.stat().st_size > 0:
+            backup_dir = path.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_path = backup_dir / f"{path.stem}.{timestamp}.bak{path.suffix}"
+            shutil.copy2(path, backup_path)
+            prune_backups(path, backup_dir)
+
+        temp_path.replace(path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def prune_backups(source_path: Path, backup_dir: Path) -> None:
+    """每个源文件只保留最近 N 份备份。"""
+    if BACKUP_RETENTION_COUNT <= 0:
+        return
+    pattern = f"{source_path.stem}.*.bak{source_path.suffix}"
+    backups = sorted(
+        backup_dir.glob(pattern),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    for old_backup in backups[BACKUP_RETENTION_COUNT:]:
+        try:
+            old_backup.unlink()
+        except OSError:
+            continue
 
 
 def preprocess_csv(input_path: Path, output_path: Path) -> list[dict[str, str]]:

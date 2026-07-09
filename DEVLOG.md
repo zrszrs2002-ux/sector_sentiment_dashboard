@@ -79,3 +79,76 @@
 - 遇到的问题和解决方案：`rg` 在当前沙箱中被拒绝访问，已改用 PowerShell `Select-String` 和定向读取关键文件完成定位；默认 `python` 和本机 Python 3.12 在沙箱内也被权限拒绝，已通过授权执行本机 Python 完成 `py_compile` 语法检查和 CSV 重新生成。真实 RSS 数据中仍有 2 条 `title == summary == content` 的记录，因此这 2 条无法提取非标题证据句，保留标题作为合理兜底。
 - 当前项目状态：`src/article_pipeline.py` 已更新证据句选择逻辑；语法检查通过。重新生成后，`real_processed_articles.csv` 共 705 条，其中 `title == evidence_sentence` 从 526 条降到 2 条；`processed_articles.csv` 的 demo 数据中 `title == evidence_sentence` 为 0 条。项目安装依赖后可运行；运行方式是在项目根目录执行 `streamlit run app.py`，然后在侧边栏选择 Demo 数据或真实新闻数据，刷新页面后应能看到 Key evidence sentences 中两列明显区分。
 - 下一步计划：如后续继续优化真实新闻质量，可考虑接入更完整的正文抽取或来源摘要清洗，以减少 RSS 摘要本身过短、重复标题或被截断导致的兜底情况。
+## 2026-07-08 22:24
+
+- 阶段名称 / 本次操作目标：阶段 4.5 实战化一致性修复
+- 具体做了什么：按用户确认范围完成 P0 五项、默认真实新闻优先和两项新增检查。统一 `src/config.py` 中的正式免责声明；把 RSS User-Agent、RSS URL、超时、单 feed 条数、标题相似阈值、Risk Intensity 情绪压力开关等参数集中到 config。`preprocessing.py` 不再把坏时间静默改成当前时间，而是记录 `time_parse_error`，并将 CSV 写入改为临时文件写入、备份旧文件、原子替换。`article_pipeline.py` 改为逐条新闻 try/except，坏记录写入 `data/error_records.csv` 并以低权重降级，不中断整批。词典加载增加最小兜底，避免 JSON 缺失或损坏时应用直接崩溃。`scoring.py` 将文章级 Risk Intensity 恢复为默认纯风险标签严重度映射；早期负向情绪压力/不确定性压力已放到 `RISK_USE_SENTIMENT_PRESSURE` 开关后，默认关闭，原因是会与 Fear/Uncertainty 维度耦合。
+- RSS 与数据源修复：`news_collector.py` 不再硬编码 RSS 参数；重复 URL+标题的 raw 新闻不再直接丢弃后续 feed 语境，而是合并 `tickers`、`companies` 和 `source`。如果重复新闻来自不同板块 ticker，则清空单一 `sector` fallback，避免先抓到的 feed 主导归属；处理流水线会用正文加合并后的 raw tickers/companies 重新做公司实体映射。`app.py` 改为真实新闻文件非空时默认真实新闻，真实数据为空或不可读时回落 Demo 并提示；sidebar 文案改为实战工具定位。
+- 文档更新：重写 `README.md` 的项目定位、免责声明、数据来源、数据安全、错误记录、RSS 覆盖限制、数据字典和六维指标说明；明确 Demo 只是离线兜底和测试脚手架，RSS 只覆盖最近几天新闻，30 天趋势需要连续运行抓取积累。更正 Risk Intensity 当前实现说明，说明市场级雷达采用 11 个板块等权平均。
+- 遇到的问题和解决方案：终端默认显示中文时有编码乱码，已改用 `Get-Content -Encoding UTF8` 读取关键文件并用 ASCII 锚点打补丁。Streamlit 不允许在 widget 创建后修改同名 session state，因此抓取按钮成功后不强行改 radio 状态，而是在页面初始加载阶段实现真实新闻优先。为了验证数据但避免重复联网，本轮只基于现有 `raw_articles.csv` 重跑处理流水线，没有再次抓取 RSS。
+- 当前项目状态：已重新生成 `data/demo_articles.csv`、`data/processed_articles.csv`、`data/real_processed_articles.csv`，并新增 `data/error_records.csv` 与 `data/backups/`。验证结果：Demo processed 132 条，真实 processed 705 条；Demo/真实 processed 均无缺列；错误记录 0 条；真实数据 `time_parse_error` 和 `processing_error` 非空数量均为 0；`has_real_articles()` 为 True；默认 `macro risk` 中性情绪下 Risk Intensity 为 80.0，证明默认纯风险标签公式生效；真实新闻板块 Attention 范围为 4.545 到 95.455，11 个板块均为不同取值且无 0/100；Disagreement 范围为 8.444 到 25.089，无负数；重复 raw 合并测试中 AAPL/MSFT/JPM 语境被合并，跨板块时 `sector` 清空。
+- 下一步计划：阶段 4.5 到此暂停，等待用户确认后再进入 P1。P1 顺序应先做 FinBERT 可选 wrapper；评估模块只做覆盖统计、输出分布和人工标注 CSV 指标接口；macro overlay 限定为 Unmapped 宏观新闻进入 Market Brief 和 Top Drivers，不重构聚合层。
+## 2026-07-08 22:39
+
+- 阶段名称 / 本次操作目标：4.5.1 小补丁与 P1 第一轮实战增强
+- 具体做了什么：修复 `src/news_collector.py` 中 RSS 发布时间兜底仍然静默的问题，`parsed_time_to_utc()` 现在解析失败或缺失时使用该条记录的 `collected_at`，并在 `time_parse_error` 写入 `published_at: missing/unparseable in RSS; fallback=collected_at`。在 `src/config.py` 新增 `BACKUP_RETENTION_COUNT = 10`，`write_article_csv()` 备份后会按源文件清理 `data/backups/`，每个源文件只保留最近 10 份备份。
+- P1 FinBERT wrapper：在 `src/sentiment_model.py` 增加可选 FinBERT 单句推理 wrapper，默认模型为 `ProsusAI/finbert`，使用 CPU，默认只读取本地缓存；依赖或模型不可用时自动回退词典模型，并在命令行/侧边栏给中文提示。保持 `score_sentence()` 为唯一替换点，`analyze_article_sentiment()` 的分句聚合和证据句逻辑未改变。`requirements-full.txt` 改为 CPU 版 PyTorch 依赖。
+- P1 页面与评估：在 `pages/4_Article_Explorer.py` 增加发布时间范围筛选；新增 `pages/5_Evaluation.py`，提供覆盖统计、输出分布、人工标注 CSV 模板下载和准确率计算接口。评估模块只做最简版，未做消融或敏感性分析。
+- P1 Top Drivers 与 macro overlay：新增 `src/driver_analysis.py`，在展示层计算 `driver_score` 和 `driver_reason`，不改变六维聚合。`pages/1_Market_Overview.py` 改用新的 Top Drivers，并确保至少 1 条 `Unmapped` 宏观/市场级新闻可进入 Top Drivers；`src/llm_summary.py` 的 Market Brief 会提示 Unmapped 宏观新闻数量和代表新闻。
+- 遇到的问题和解决方案：当前本机 Python 环境缺少 `torch`，验证时 FinBERT wrapper 按预期输出中文提示“FinBERT 依赖不可用（No module named 'torch'），已回退到词典情绪模型。”并继续处理数据。第一次 Top Drivers 抽查发现宏观新闻可能被排序挤出，随后修正为先保留最高分 Unmapped 新闻，再用常规 driver 补齐。验证过程中没有联网抓取新的 RSS，只基于现有 `raw_articles.csv` 重跑处理流水线。
+- 当前项目状态：重新生成 Demo processed 132 条、真实 processed 705 条，错误记录 0 条。编译检查通过。抽查结果：RSS 发布时间缺失测试返回 `collected_at` 且错误标记正确；备份保留配置为 10，当前各源文件备份数均小于 10；覆盖统计字段完整，输出分布 10 行，人工标注接口返回 3 类指标；真实数据中 Unmapped 宏观新闻 15 条，Top Drivers 5 条中包含 1 条 Unmapped 新闻。
+- 下一步计划：P1 已完成当前确认范围的第一轮实现；后续可继续细化 FinBERT 模型缓存/下载说明、评估标注规范和更完整的驱动因子解释。
+## 2026-07-09 00:41
+
+- 阶段名称 / 本次操作目标：FinBERT 正式启用与批量推理修正
+- 具体做了什么：在 `src/config.py` 新增 `SENTIMENT_DEVICE = "auto"` 和 `FINBERT_BATCH_SIZE = 32`；`src/sentiment_model.py` 改为设备自适应，`auto` 在 `torch.cuda.is_available()` 为 True 时使用 CUDA，并在侧边栏显示 `当前情绪引擎：FinBERT (cuda)`。将 FinBERT 推理从逐句调用升级为跨文章收集句子后按批推理，再回填文章级聚合；`score_sentence()` 保留兼容入口，文章级分句聚合和证据句逻辑保持原有语义。
+- 标签映射修正：FinBERT 概率映射完全基于 `model.config.id2label` 动态解析，启动时构建 `label_to_index` 并执行映射测试。当前实际映射为 `{'positive': 0, 'negative': 1, 'neutral': 2}`，避免了把 `p_negative` 和 `p_neutral` 按直觉顺序静默互换的风险。
+- 依赖说明更新：`requirements-full.txt` 更新为 `transformers==5.13.0` 与 `torch==2.12.1+cpu`，并在文件顶部注明本地已安装 GPU 版 torch 时不要运行该文件，以免被 CPU 版覆盖。README 补充 `SENTIMENT_DEVICE`、`FINBERT_BATCH_SIZE` 和动态标签映射说明。
+- 数据重跑与验证：使用本地 Python 3.12 环境（`torch 2.12.1+cu130`、`transformers 5.13.0`、CUDA 可用、`ProsusAI/finbert` 已缓存）重新生成 `data/demo_articles.csv`、`data/processed_articles.csv` 和 `data/real_processed_articles.csv`；真实新闻仍为 705 条，Demo 为 132 条，`data/error_records.csv` 为 0 条。编译检查通过。
+- 分布变化：词典模型基线下真实新闻 `sentiment_score` 均值 0.0234、中位数 0.0000、P10 -0.1000、P90 0.2280；FinBERT 后均值 0.1469、中位数 0.1360、P10 -0.5526、P90 0.8410，说明 FinBERT 输出更有区分度和极性。Demo `sentiment_score` 均值从 -0.1126 变为 0.0905，中位数从 -0.1435 变为 0.1775。
+- 证据句抽查：抽取同 5 条真实新闻对比，FinBERT 后情绪概率明显更有区分度；证据句选择整体保持基于摘要/正文的可解释句子。示例：`Duke Energy...investment...` 从词典中性变为强正向 `sentiment_score=0.844`，证据句仍指向“investing in American suppliers...support customer value...”；`SpaceX Nasdaq-100 inclusion...options pricing` 从词典中性变为强负向 `sentiment_score=-0.955`，证据句仍为 options trading/liquidity 相关句。`Jim Cramer...Blackstone` 的证据句从过短的 `Blackstone Inc.` 改为更有上下文的摘要句，但仍含 RSS 截断符 `[…]`，说明证据句质量仍受 RSS 摘要质量限制。
+## 2026-07-09 00:49
+
+- 阶段名称 / 本次操作目标：新增自适应环境安装脚本
+- 具体做了什么：在项目根目录新增 `setup_env.py`，脚本使用 `nvidia-smi` 探测 NVIDIA GPU；探测成功时安装 `torch==2.12.1` 的 cu130 版本，探测失败或无 `nvidia-smi` 时回退安装 `torch==2.12.1+cpu`；若已检测到本地 GPU 版 torch，则跳过 torch 安装，避免覆盖现有 GPU 环境。随后脚本安装 `requirements.txt` 和 `transformers==5.13.0`，最后自检并用中文打印 torch 版本、CUDA 可用性、设备名称和结论。
+- 文档更新：`requirements-full.txt` 顶部注释改为“供 Streamlit Community Cloud 等无 GPU 云端部署使用；本地安装请运行 python setup_env.py，会自动选择 CPU/GPU 版本”。`README.md` 的本地运行章节改为推荐 `python setup_env.py`，云端部署章节说明使用 `requirements-full.txt`。
+- 遇到的问题和解决方案：用户要求脚本保持 50 行左右，初版偏长，随后压缩为 62 行的简单实现。为避免破坏当前已验证的 GPU torch 环境，本轮没有执行安装脚本，只执行 `python -m py_compile setup_env.py` 做语法检查。
+- 当前项目状态：`setup_env.py` 语法检查通过；现有 FinBERT/GPU 环境未被覆盖。
+
+## 2026-07-10 01:12
+
+- 阶段名称 / 本次操作目标：修复 data 目录 CSV 在中文 Windows Excel 双击打开时弯引号和特殊字符显示为乱码的问题
+- 具体做了什么：用户指出 data 目录下 CSV 以无 BOM UTF-8 写出，中文 Windows Excel 双击打开时会按 GBK 误读，导致标题中的弯引号显示为 `鈥檛` 等乱码；要求将项目中所有 CSV 写出编码统一为 `utf-8-sig`，包括 `write_article_csv`、`error_records.csv`、评估页标注模板下载和 demo 数据生成器等写出点。为此在 `src/config.py` 新增 `CSV_EXPORT_ENCODING = "utf-8-sig"`；在 `src/preprocessing.py` 中把统一 CSV writer 的 `temp_path.open(..., encoding=...)` 改为使用该常量；在 `pages/5_Evaluation.py` 中把人工标注模板下载的 `to_csv(...).encode(...)` 改为使用同一个常量。复扫后确认 demo 数据生成器、真实新闻处理、`processed_articles.csv`、`real_processed_articles.csv` 和 `error_records.csv` 都通过统一 writer 写出；同时扫描 `data/**/*.csv`，给 `data/backups` 中历史无 BOM 备份 CSV 仅补充 BOM 字节，不解析或改写字段内容。
+- 遇到的问题和解决方案：`rg` 在当前环境中仍被权限拒绝，已改用 PowerShell `Select-String` 定位 CSV 写出点；本机 Python 3.12 在沙箱内直接执行被拒绝，已通过授权执行完成数据重跑和语法检查；第一次重生成 `real_processed_articles.csv` 时遇到 Windows `PermissionError`，原因是目标文件正被其他进程占用，等待锁释放后重新运行成功；PowerShell 直接匹配弯引号时出现解析问题，改用 Unicode 码点验证 `U+2019` 等特殊字符。
+- 当前项目状态：`src/config.py`、`src/preprocessing.py` 和 `pages/5_Evaluation.py` 已完成编码统一；`data/demo_articles.csv`、`data/processed_articles.csv`、`data/raw_articles.csv`、`data/real_processed_articles.csv` 和 `data/error_records.csv` 均已重新写出并验证前三字节为 `EF BB BF`。全量扫描 `data` 目录下 34 个 `.csv` 文件，均已带 UTF-8 BOM。抽查真实新闻标题 `Doesn’t`，弯引号为正确的 `U+2019`，不是 `鈥檛` 乱码。相关 Python 文件已通过 `py_compile` 语法检查。项目安装依赖后可运行；运行方式是在项目根目录执行 `streamlit run app.py`，在侧边栏选择 Demo 数据或真实新闻数据后查看页面，CSV 文件可直接用 Excel 双击打开。
+- 下一步计划：如后续新增任何 CSV 导出入口，应继续复用 `CSV_EXPORT_ENCODING` 或 `write_article_csv()`，避免重新出现无 BOM UTF-8 被 Excel 误读的问题。
+
+## 2026-07-10 02:05
+
+- 阶段名称 / 本次操作目标：LLM 每日市场简报、每日快照与一天多次抓取的增量处理
+- 具体做了什么：新增 `data/sector_daily_scores.csv`、`data/market_daily_scores.csv` 的每日快照写入逻辑；每次全量或增量处理完成后按 UTC 日期 upsert 当天板块级/市场级六维分数，同日重跑覆盖当天行，历史行不动。新增 `src/daily_snapshots.py`、`src/brief_builder.py` 和 `src/brief_generator.py`，构建过去 24 小时简报数据包，包含市场六维分数、前一日差值、板块排名、异动板块、Top 5 Drivers、风险类别 Top 5、Unmapped 宏观标题和覆盖统计。`src/llm_summary.py` 改造为 Anthropic SDK + 规则模板降级链，模型配置为 `claude-opus-4-8`，API key 从 `ANTHROPIC_API_KEY` 读取，失败时打印中文日志并回退规则模板。`src/news_collector.py` 抓取后改用 `process_articles_incremental()`，只对新增 `article_id` 运行映射/标签/情绪/评分，历史结果复用，并输出“本次新增 N 条，复用 M 条”；处理完成后调用每日简报门闸，未到生成时刻或今日已生成则跳过。
+- 页面与调度：Market Overview 改为只读取 `data/latest_brief.md`，显示“数据更新于”和“简报生成于”两个时间戳，不在 Streamlit 渲染路径调用 LLM；侧边栏新增“立即重新生成简报”二次确认按钮，确认文案说明可能产生 API 费用。Sector Detail 趋势图优先读取每日快照，提供 7/30 天窗口；Article Explorer 新增“加载全部历史”选项，其余页面默认 `WORKING_SET_DAYS = 30` 工作集。新增 `scripts/setup_schedule.ps1`，用于注册每 4 小时运行 `python -m src.news_collector` 的 Windows 计划任务。
+- 存储分层：`raw_articles.csv` 继续永久保留，不自动清理；文件超过 `RAW_SQLITE_WARNING_MB = 50` 时仅输出建议迁移 SQLite 的中文日志。每日快照不受工作集窗口影响，永久累积。简报写入 `data/latest_brief.md`，并按日期归档到 `data/briefs/`。
+- 遇到的问题和解决方案：旧中文文件在 PowerShell 输出中仍显示为乱码，为避免误伤旧内容，本轮多数旧文件采用窄锚点补丁；页面 1 和页面 3 体量较小，直接用 UTF-8 中文重写以提升可读性。Anthropic SDK 是可选运行依赖，已加入 `requirements.txt`，但代码仍保留 import/API 失败回退，避免无 key 或无网络时阻断抓取。
+- 当前项目状态：代码已接入每日快照、增量处理、简报门闸、LLM/规则降级、页面只读简报和任务计划脚本；下一步需要运行语法检查、基于现有 demo/真实 processed 数据刷新快照，并在无 API key 情况下验证规则模板可写入 `latest_brief.md`。
+
+## 2026-07-10 02:58
+
+- 阶段名称 / 本次操作目标：每日简报与增量处理验证
+- 具体做了什么：运行 Python 3.12 `compileall` 语法检查，覆盖 `src`、`pages`、`app.py` 和 `setup_env.py`，检查通过。基于现有 `processed_articles.csv` 写入 Demo 每日快照；对 `raw_articles.csv` / `real_processed_articles.csv` 运行 `process_articles_incremental()`，本次新增 0 条，复用 1201 条，处理后总计 1201 条。显式清空 `ANTHROPIC_API_KEY` 后强制生成一次简报，验证无 key 时会回退规则模板并写入 `data/latest_brief.md` 与 `data/briefs/2026-07-10.md`。检查 `data/sector_daily_scores.csv` 当前 22 行（Demo/真实新闻各 11 个板块），`data/market_daily_scores.csv` 当前 2 行（Demo/真实新闻各 1 行）。验证 `maybe_generate_daily_brief()` 在当前本地时间未到 8:00 时会跳过生成；验证 `scripts/setup_schedule.ps1` 可被 PowerShell 解析。
+- 当前项目状态：本轮功能验证通过。由于验证时刻早于本地 8:00，`latest_brief.md` 是一次手动强制生成的规则模板简报；后续有 `ANTHROPIC_API_KEY` 时可通过侧边栏确认按钮重新生成 AI 简报。
+
+## 2026-07-10 03:35
+
+- 阶段名称 / 本次操作目标：每日简报 LLM 供应商切换到 OpenAI API
+- 具体做了什么：`src/llm_summary.py` 从 Anthropic SDK 改为 OpenAI 官方 Python SDK，API key 改从 `OPENAI_API_KEY` 读取，并使用 Responses API 传入既有接地系统提示词和 JSON 数据包。新增 `LLM_MODEL_BRIEF`、`LLM_MODEL_SECTOR_SUMMARY`、`LLM_MODEL_CHAT` 三个按任务配置项；当前简报期望模型为 `gpt-5.6-terra`，保留 `LLM_MODEL` 作为兼容别名。每次生成前先调用 `client.models.list()`，仅当精确模型 ID 出现在账户实际返回列表中时才调用生成接口；不匹配时输出中文原因并回退规则模板，不会将猜测的模型 ID 发给 API。原有门闸、规则降级、接地提示词、免责声明补全、文件归档和页面只读设计保持不变。
+- 依赖与文档：`requirements.txt` 用 `openai>=1.66.0,<2.0.0` 替换 Anthropic 依赖；README 的环境变量和模型校验说明同步改为 OpenAI；侧边栏强制生成确认文案改为 `OPENAI_API_KEY`。
+- 验证说明：当前 Python 环境未安装 OpenAI SDK，且未检测到 `OPENAI_API_KEY`，因此无法在本次环境中实际调用 `/v1/models` 获得账户模型 ID。代码会在后续有 key 的首次生成前执行该校验；若 `gpt-5.6-terra` 不在返回列表中，将安全回退并提示用 API 实际返回的 ID 更新 `LLM_MODEL_BRIEF`。已运行 `compileall`，并以离线 Fake OpenAI client 验证：无 key 时规则降级；模型可用时调用顺序严格为 `models.list()` 后 `responses.create()`；模型不在清单中时不会调用生成接口。
+
+## 2026-07-10 03:17
+
+- 阶段名称 / 本次操作目标：简报阶段收尾补丁（UI 与冷启动修复）
+- 具体做了什么：重构 Market Overview 排版，顶部改为 4 张 `st.metric` 指标卡（窗口内新闻数、覆盖来源数、数据窗口、数据更新时间）；左列改为市场雷达图 + 市场级六维分数表上下排列；右列每日简报放入 `st.container(height=600, border=True)` 固定高度滚动容器，避免长简报撑开整页；Sector Heatmap 和 Top Drivers 保持下方通栏。Sector Detail 趋势图改为快照天数至少 2 天才画 `lines+markers` 折线图，快照日期轴使用分类轴，避免 Plotly 自动缩放到亚秒级刻度；快照不足 2 天时显示“已积累 N 天快照，趋势图需至少 2 天数据”并展示当日数值表格。
+- 简报模板修复：`generate_rule_brief_from_payload()` 不再输出“较前一日暂无”；当前一日快照不存在时，差值子句整体省略，并在数据覆盖说明中写入“暂无前一日对比基准，异动对比将于明日起可用”。
+- 验证结果：Python `compileall` 通过；当前 Streamlit 版本 1.58.0 支持 `st.container(height=..., border=...)`；无 API key 情况下强制生成规则模板简报成功，确认 `latest_brief.md` 不含“较前一日暂无”，且包含数据覆盖基准说明。当前真实新闻样例板块快照天数为 1，因此趋势页会走冷启动提示 + 当日数值表格路径。
+- 时区核查：`brief_generator._local_now()` 使用 `datetime.now().astimezone()`，即系统本地时区；本机返回 `澳大利亚东部标准时间`，UTC offset 为 `+10:00`。`BRIEF_GENERATION_HOUR_LOCAL = 8` 的 scheduled time 由同一个 aware datetime `replace(hour=8, ...)` 生成，因此门闸按系统本地 08:00 触发，不会因为 UTC/本地时间混用提前或滞后触发。当前核查时刻为 `2026-07-10T03:16:55+10:00`，门闸判断为未过 08:00。

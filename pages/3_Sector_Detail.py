@@ -5,6 +5,7 @@ import streamlit as st
 
 from src.aggregation import sector_metrics
 from src.config import METRIC_COLUMNS, METRIC_LABELS
+from src.daily_snapshots import load_sector_snapshots
 from src.ui_helpers import load_selected_articles, url_column_config
 
 
@@ -13,6 +14,13 @@ def split_values(series: pd.Series) -> pd.Series:
     for item in series.dropna().astype(str):
         values.extend([part.strip() for part in item.split(";") if part.strip()])
     return pd.Series(values)
+
+
+def metric_table_from_row(row: pd.Series, value_label: str) -> list[dict[str, float | str]]:
+    return [
+        {"指标": METRIC_LABELS[column], value_label: round(float(row.get(column, 0) or 0), 1)}
+        for column in METRIC_COLUMNS
+    ]
 
 
 df, source_mode = load_selected_articles()
@@ -43,27 +51,49 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("过去 30 天趋势图框架")
-trend = (
-    sector_articles.assign(published_date=sector_articles["published_at"].dt.date)
-    .groupby("published_date", as_index=False)[["sentiment_score", "risk_intensity"]]
-    .mean()
-)
-if len(trend) >= 2:
-    trend_fig = px.line(
-        trend,
-        x="published_date",
-        y=["sentiment_score", "risk_intensity"],
-        markers=True,
-    )
+st.subheader("板块趋势")
+trend_days = st.radio("趋势窗口", [7, 30], index=1, horizontal=True)
+snapshot_df = load_sector_snapshots(source_mode)
+snapshot_trend = snapshot_df[snapshot_df["sector"].astype(str).eq(str(selected_sector))].copy()
+if not snapshot_trend.empty:
+    snapshot_trend["snapshot_date"] = pd.to_datetime(snapshot_trend["snapshot_date"], errors="coerce").dt.date
+    snapshot_trend = snapshot_trend.dropna(subset=["snapshot_date"]).sort_values("snapshot_date")
+    max_snapshot_date = snapshot_trend["snapshot_date"].max()
+    min_snapshot_date = (pd.Timestamp(max_snapshot_date) - pd.Timedelta(days=trend_days - 1)).date()
+    snapshot_trend = snapshot_trend[snapshot_trend["snapshot_date"] >= min_snapshot_date]
+
+snapshot_day_count = int(snapshot_trend["snapshot_date"].nunique()) if not snapshot_trend.empty else 0
+if snapshot_day_count < 2:
+    st.info(f"已积累 {snapshot_day_count} 天快照，趋势图需至少 2 天数据")
+    if snapshot_day_count:
+        latest_snapshot = snapshot_trend.sort_values("snapshot_date").iloc[-1]
+        st.dataframe(
+            metric_table_from_row(latest_snapshot, "当日快照值"),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.dataframe(
+            metric_table_from_row(sector_row, "当前工作集数值"),
+            use_container_width=True,
+            hide_index=True,
+        )
 else:
-    trend_fig = px.scatter(
-        trend,
-        x="published_date",
-        y="sentiment_score",
-        title="当前筛选结果不足以形成连续趋势。",
+    plot_df = snapshot_trend.copy()
+    plot_df["snapshot_date_label"] = pd.to_datetime(plot_df["snapshot_date"]).dt.strftime("%b %d")
+    date_order = plot_df["snapshot_date_label"].drop_duplicates().tolist()
+    trend_fig = px.line(
+        plot_df,
+        x="snapshot_date_label",
+        y=METRIC_COLUMNS,
+        markers=True,
+        category_orders={"snapshot_date_label": date_order},
+        labels={**METRIC_LABELS, "snapshot_date_label": "snapshot_date"},
+        title="基于每日聚合快照的六维趋势",
     )
-st.plotly_chart(trend_fig, use_container_width=True)
+    trend_fig.update_traces(mode="lines+markers")
+    trend_fig.update_xaxes(type="category")
+    st.plotly_chart(trend_fig, use_container_width=True)
 
 col1, col2, col3 = st.columns(3)
 with col1:

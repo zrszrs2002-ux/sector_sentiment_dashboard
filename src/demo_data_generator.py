@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
-import csv
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from src.config import DATA_DIR, EXPECTED_ARTICLE_COLUMNS, RISK_SEVERITY_WEIGHTS
 from src.article_pipeline import process_articles
+from src.config import DATA_DIR, EXPECTED_ARTICLE_COLUMNS, RISK_SEVERITY_WEIGHTS
+from src.preprocessing import write_article_csv
 
 
 BASE_TIME = datetime(2026, 7, 7, 0, 0, tzinfo=UTC)
@@ -245,11 +245,7 @@ def generate_demo_records() -> list[dict[str, str]]:
 
 
 def write_raw_demo(path: Path, records: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=EXPECTED_ARTICLE_COLUMNS)
-        writer.writeheader()
-        writer.writerows(records)
+    write_article_csv(path, records)
 
 
 def main() -> None:

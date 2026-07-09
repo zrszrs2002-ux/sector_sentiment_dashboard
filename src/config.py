@@ -7,8 +7,30 @@ DICTIONARY_DIR = DATA_DIR / "dictionaries"
 DEMO_PROCESSED_ARTICLES_PATH = DATA_DIR / "processed_articles.csv"
 RAW_ARTICLES_PATH = DATA_DIR / "raw_articles.csv"
 REAL_PROCESSED_ARTICLES_PATH = DATA_DIR / "real_processed_articles.csv"
+ERROR_RECORDS_PATH = DATA_DIR / "error_records.csv"
+SECTOR_DAILY_SCORES_PATH = DATA_DIR / "sector_daily_scores.csv"
+MARKET_DAILY_SCORES_PATH = DATA_DIR / "market_daily_scores.csv"
+LATEST_BRIEF_PATH = DATA_DIR / "latest_brief.md"
+BRIEF_ARCHIVE_DIR = DATA_DIR / "briefs"
+CSV_EXPORT_ENCODING = "utf-8-sig"
+BACKUP_RETENTION_COUNT = 10
+WORKING_SET_DAYS = 30
+RAW_SQLITE_WARNING_MB = 50
 
-DISCLAIMER = "本系统仅用于教育和研究演示，不构成投资建议。"
+DISCLAIMER = "本系统基于公开财经新闻自动分析市场舆情，结果仅供研究参考，不构成投资建议。投资有风险，决策需独立判断。"
+
+RSS_USER_AGENT = (
+    "SectorSentimentDashboard/0.2 "
+    "(practical research tool; contact: local-user; RSS title-summary-url only)"
+)
+RSS_REQUEST_TIMEOUT_SECONDS = 12
+RSS_MAX_ENTRIES_PER_FEED = 20
+CNBC_TOP_NEWS_RSS = "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+MARKETWATCH_TOP_STORIES_RSS = "https://feeds.marketwatch.com/marketwatch/topstories"
+YAHOO_FINANCE_RSS_TEMPLATE = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+
+SIMILAR_TITLE_THRESHOLD = 0.9
+SIMILAR_PREFIX_TOKEN_COUNT = 5
 
 SECTORS = [
     "Technology",
@@ -51,6 +73,7 @@ EXPECTED_ARTICLE_COLUMNS = [
     "url",
     "published_at",
     "collected_at",
+    "time_parse_error",
     "language",
     "tickers",
     "companies",
@@ -76,6 +99,7 @@ EXPECTED_ARTICLE_COLUMNS = [
     "agg_weight",
     "is_duplicate",
     "dedup_factor",
+    "processing_error",
 ]
 
 # TODO: 第二阶段计划用人工标注数据对这些权重做校准和敏感性分析，当前为专家先验设定的 baseline 值
@@ -88,6 +112,33 @@ UNCERTAINTY_NEUTRAL_WEIGHT = 0.6
 UNCERTAINTY_ENTROPY_WEIGHT = 0.4
 RISK_AVG_WEIGHT = 0.7
 RISK_P90_WEIGHT = 0.3
+
+# 默认关闭情绪/不确定性压力项，避免 Risk Intensity 与 Fear/Uncertainty 维度耦合。
+# 打开后会回到早期 baseline：风险标签严重度 + 负向情绪压力 + 不确定性压力。
+RISK_USE_SENTIMENT_PRESSURE = False
+RISK_SENTIMENT_SEVERITY_WEIGHT = 0.75
+RISK_NEGATIVE_PRESSURE_WEIGHT = 35
+RISK_UNCERTAINTY_PRESSURE_WEIGHT = 10
+
+# FinBERT 默认只读取本地缓存；模型或依赖不可用时会回退词典模型并给中文提示。
+SENTIMENT_ENGINE = "finbert"
+SENTIMENT_DEVICE = "auto"
+FINBERT_MODEL_NAME = "ProsusAI/finbert"
+FINBERT_LOCAL_FILES_ONLY = True
+FINBERT_MAX_LENGTH = 128
+FINBERT_BATCH_SIZE = 32
+
+LLM_ENABLED = True
+# Legacy default retained for existing integrations. The runtime first verifies
+# this exact ID through OpenAI's models.list() response before generation.
+LLM_MODEL = "gpt-5.6-terra"
+LLM_MODEL_BRIEF = LLM_MODEL
+# Reserved task-specific defaults for the upcoming sector-summary and chat features.
+LLM_MODEL_SECTOR_SUMMARY = "gpt-5.6-luna"
+LLM_MODEL_CHAT = "gpt-5.6-luna"
+LLM_TIMEOUT_SECONDS = 45
+BRIEF_GENERATION_HOUR_LOCAL = 8
+BRIEF_WINDOW_HOURS = 24
 
 RELEVANCE_WEIGHTS = {
     "company_or_ticker": 1.0,

@@ -4,104 +4,72 @@
 
 ## 1. 项目简介
 
-本项目是一个课程展示用的 Streamlit dashboard，目标是把财经新闻中的公司、ticker、板块、主题、情绪和风险信号整理成板块级与市场级的六维舆情雷达。
+本项目是一个面向日常跟踪的公开财经新闻舆情监测工具。系统从 RSS 财经新闻中提取标题、摘要、URL、发布时间和来源，经过公司/ticker/板块映射、主题与风险标签、可选 FinBERT/词典情绪模型和六维指标聚合后，在 Streamlit dashboard 中展示市场级和板块级舆情状态。
 
-当前已完成第一冲刺的第四阶段，并新增 RSS 真实新闻抓取能力：项目骨架、页面导航、132 条可复现 demo 新闻、RSS 抓取、UTC 时间标准化、基础去重、公司/ticker/板块映射、topic/risk 规则词典、离线词典情绪模型 fallback，以及正式板块级/市场级六维聚合已经就绪。FinBERT 推理和评估模块将在后续阶段逐步补齐。
+免责声明：本系统基于公开财经新闻自动分析市场舆情，结果仅供研究参考，不构成投资建议。投资有风险，决策需独立判断。
 
-免责声明：本系统仅用于教育和研究演示，不构成投资建议。
+真实新闻是主要数据源；Demo 数据只作为离线兜底、测试脚手架和页面演示样本。当前版本提供 FinBERT 可选 wrapper；依赖或模型不可用时会回退到离线词典情绪 fallback，并在侧边栏/命令行给出中文提示。
 
-## 2. 功能列表
+## 2. 功能
 
-- 市场总览：展示市场级六维指标、demo 新闻数量、来源数量、板块热力图和规则摘要。
-- 板块比较：展示 11 个 GICS 风格板块的六维指标对比。
-- 板块详情：按单个板块查看雷达图、趋势框架、重点公司、主题和证据句。
-- 文章浏览器：查看 demo 新闻列表，并支持基础筛选和排序。
-- RSS 新闻抓取：侧边栏可切换“Demo 数据 / 真实新闻”，并可点击“抓取最新新闻”更新真实 RSS 数据。
-- 后续计划：完善 Top Drivers 解释、评估脚本、可选 RSS/CSV 数据接入和 FinBERT 接口。
+- 市场总览：展示市场级六维指标、板块热力图、规则摘要和 Top Market Drivers；Unmapped 宏观新闻进入 Market Brief 和 Top Drivers，但不摊入板块聚合。
+- 板块比较：比较 11 个 GICS 风格板块的 Optimism、Fear、Uncertainty、Attention、Disagreement、Risk Intensity。
+- 板块详情：查看单板块雷达图、趋势框架、重点公司、主题、证据句和高风险新闻。
+- 文章浏览器：查看处理后的新闻列表，支持发布时间、来源、板块、风险类别筛选，URL 可点击跳转。
+- 评估：展示覆盖统计、输出分布，并提供人工标注 CSV 模板下载和准确率计算接口。
+- RSS 抓取：支持 Yahoo Finance ticker RSS、CNBC Top News RSS、MarketWatch Top Stories RSS；不使用已停止服务的 Reuters RSS。
 
-## 3. 系统架构
+## 3. 数据来源与存储
 
-第一版采用轻量本地架构：
+真实新闻抓取只读取 RSS 中的标题、摘要、URL、发布时间和来源；`content` 字段使用摘要填充。第一版不抓取新闻原文页面，以减少反爬、登录限制和版权风险。
 
-```text
-demo CSV / 可选 RSS / 可选 CSV 上传
-        ↓
-数据加载与预处理
-        ↓
-公司与板块映射、主题与风险标签、情绪识别
-        ↓
-单篇新闻结构化输出
-        ↓
-板块级与市场级六维聚合
-        ↓
-Streamlit + Plotly dashboard
-```
+主要数据文件：
 
-页面组织方式：使用 `streamlit==1.58.0`，并采用 Streamlit 官方当前推荐的 `st.Page` + `st.navigation` 方式组织多页面应用。这样 `app.py` 作为统一入口和页面路由，`pages/` 下的文件负责各功能页。
+- `data/raw_articles.csv`：RSS 抓取后的真实新闻原始累积数据。多次抓取会累积保存，重复 URL+标题会合并 ticker/company/source 语境。
+- `data/real_processed_articles.csv`：真实新闻经过预处理、去重、映射、标签、情绪和评分后的结果。
+- `data/demo_articles.csv`：本地生成的 Demo 原始样本。
+- `data/processed_articles.csv`：Demo 样本处理后的结果。
+- `data/error_records.csv`：单条新闻处理失败时的降级记录，避免一条坏数据中断整批流水线。
+- `data/backups/`：CSV 写入前的自动备份目录。系统采用临时文件写入、备份旧文件、原子替换，降低数据被覆盖或写坏的风险；每个源文件默认保留最近 10 份备份。
 
-## 4. 数据来源说明
+RSS 通常只覆盖最近几天的新闻。30 天趋势需要连续多日运行抓取来积累，短期内真实新闻模式下趋势图稀疏是预期行为。
 
-当前阶段支持两类数据源：
+## 4. 数据字典补充
 
-1. Demo 数据：本地生成，不依赖网络，作为兜底。
-2. 真实新闻：通过 RSS 抓取，默认使用 Yahoo Finance 按 ticker 的 RSS、CNBC Top News RSS、MarketWatch Top Stories RSS。不使用 Reuters RSS，因为该服务已停止。
-
-RSS 第一版只读取标题、摘要、URL、发布时间和来源；`content` 字段使用摘要填充，不抓取新闻原文页面，避免反爬、登录限制和版权问题。
-
-RSS 地址示例：
-
-- Yahoo Finance ticker RSS：`https://feeds.finance.yahoo.com/rss/2.0/headline?s=NVDA&region=US&lang=en-US`
-- CNBC Top News RSS：`https://www.cnbc.com/id/100003114/device/rss/rss.html`
-- MarketWatch Top Stories RSS：`https://feeds.marketwatch.com/marketwatch/topstories`
-
-- `data/demo_articles.csv`：132 条原始 demo 新闻。
-- `data/processed_articles.csv`：经过 UTC 时间标准化、基础去重、公司映射、主题/风险标签、词典情绪 fallback 和聚合权重字段处理后的 demo 新闻。
-- `data/raw_articles.csv`：RSS 抓取得到的真实新闻原始累积数据。多次运行会追加新新闻，不覆盖历史。
-- `data/real_processed_articles.csv`：真实新闻经过现有预处理、去重、映射、标签、情绪和评分流水线后的结果。
-- `data/dictionaries/company_sector_mapping.json`：公司、ticker、别名与板块映射。
-- `data/dictionaries/topic_keywords.json`：主题关键词词典。
-- `data/dictionaries/risk_keywords.json`：风险类别关键词词典。
-- `data/dictionaries/sentiment_lexicon.json`：离线 fallback 情绪词典。
-
-数据覆盖 11 个板块，每个板块 12 条新闻，发布时间分布在 2026-06-07 至 2026-07-07 的 UTC 时间范围内。当前去重策略包括 URL 去重、标题精确去重和保守的标题高相似转载识别。后续阶段会保留可选 RSS/API 抓取模块。
-
-RSS 只覆盖最近几天的新闻，30 天趋势需要连续多日运行抓取来积累。短期内真实新闻模式下趋势图比较稀疏，这是预期行为。
-
-数据字典补充：
-
-- `attention_weight`：保留字段，当前恒为 0。关注度在板块层由新闻量计算，文章层无实际含义。
-- `disagreement_input`：`sentiment_score` 的逐行副本，作为板块分歧度加权标准差的输入留档；当前聚合代码实际直接读取 `sentiment_score`。
 - `agg_weight`：聚合权重，计算为 `time_weight * relevance_weight * dedup_factor`，用于加权平均和加权标准差。
+- `attention_weight`：保留字段，恒为 0。关注度在板块层由新闻量计算，文章层无实际含义。
+- `disagreement_input`：`sentiment_score` 的逐行副本，作为板块分歧度加权标准差的输入留档；聚合代码当前直接读取 `sentiment_score`。
+- `time_parse_error`：发布时间或采集时间解析失败时记录 fallback 原因。
+- `processing_error`：单条新闻处理失败时记录异常摘要；该行会以低权重降级输出。
 
-## 5. 六维指标解释
+## 5. 六维指标
 
-- Optimism 乐观度：新闻中正向概率或正向信号强度。
-- Fear 恐惧度：新闻中负向概率或风险担忧强度。
-- Uncertainty 不确定性：中性概率与概率熵的组合。
-- Attention 关注度：板块层指标，使用近 7 天窗口内该板块加权新闻量在 11 个板块中的排名分位数，公式为 `100 * (rank - 0.5) / 板块数`，并列时取平均排名。它不是单篇新闻的时间衰减权重。
-- Disagreement 分歧度：板块层指标，使用板块内 `sentiment_score` 的加权标准差，计算为 `100 * clip(weighted_std, 0, 1)`；板块内新闻少于 2 条时记为 0。
-- Risk Intensity 风险强度：风险类别严重度与新闻风险信号的综合分数。
+- Optimism：文章正向概率或正向信号强度，板块层使用 `agg_weight` 加权平均。
+- Fear：文章负向概率或风险担忧强度，板块层使用 `agg_weight` 加权平均。
+- Uncertainty：中性概率与概率熵的组合，板块层使用 `agg_weight` 加权平均。
+- Attention：板块层指标。当前使用近 7 天窗口内该板块加权新闻量在 11 个板块中的排名分位数，公式为 `100 * (rank - 0.5) / 板块数`，并列取平均排名。
+- Disagreement：板块内 `sentiment_score` 的加权标准差，`D = 100 * clip(weighted_std, 0, 1)`；板块内新闻少于 2 条时为 0。
+- Risk Intensity：文章层默认由风险标签严重度映射到 0-100。早期“负向情绪压力/不确定性压力”公式已放到 `src/config.py` 的 `RISK_USE_SENTIMENT_PRESSURE` 开关后，默认关闭，避免与 Fear/Uncertainty 维度耦合。板块层使用 `0.7 * 加权平均 + 0.3 * P90`，样本不足时用均值替代 P90。
 
-当前 demo CSV 中的单篇新闻分数由 `src/sentiment_model.py` 的词典情绪 fallback、`src/topic_risk_tagger.py` 的风险标签和 `src/scoring.py` 的基础公式生成。单篇新闻聚合权重独立保存为 `agg_weight = time_weight * relevance_weight * dedup_factor`，避免与 Attention 概念混用。
+市场级雷达当前采用 11 个板块等权平均，而不是新闻量加权，以避免真实新闻流量过度集中在少数高曝光板块时主导市场总览。
 
-板块级聚合由 `src/aggregation.py` 完成：
-
-- Optimism / Fear / Uncertainty：使用 `agg_weight` 做加权平均。
-- Disagreement：使用 `sentiment_score` 的加权标准差。
-- Attention：使用近 7 天板块加权新闻量的横向排名分位数。当前这是没有长期历史数据时的横截面近似；等真实新闻积累超过 30 天后，应切换为每个板块相对自身历史新闻量分布的 ECDF 分位数，以避免低估 Utilities、Materials 等天然新闻较少的板块。
-- Risk Intensity：使用 `0.7 * 加权平均风险强度 + 0.3 * P90 风险强度`；样本不足时用平均值替代 P90。
-
-市场级雷达采用 11 个板块等权平均，而不是新闻量加权。这样可以避免 demo 数据或真实新闻流量过度集中在少数高曝光板块时，市场总览被单一板块主导。
-
-## 6. 如何本地运行
-
-建议在项目目录下创建虚拟环境后安装依赖：
+## 6. 本地运行
 
 ```bash
 cd sector_sentiment_dashboard
-pip install -r requirements.txt
+python setup_env.py
 streamlit run app.py
 ```
+
+`setup_env.py` 会自动探测 NVIDIA GPU：有 GPU 时安装 CUDA 版 torch，无 GPU 或探测失败时安装 CPU 版 torch；如果已检测到本地 GPU 版 torch，会跳过 torch 安装，避免覆盖。脚本还会安装 `requirements.txt`、`transformers`，并在最后打印 torch 版本、CUDA 状态和中文结论。
+
+默认配置只读取本地缓存中的 `ProsusAI/finbert`，不会在 dashboard 运行时强制联网下载；模型不可用时自动回退词典模型。
+
+FinBERT 相关配置集中在 `src/config.py`：
+
+- `SENTIMENT_DEVICE = "auto"`：可选 `auto/cuda/cpu`；`auto` 会在 `torch.cuda.is_available()` 为 True 时使用 CUDA。
+- `FINBERT_BATCH_SIZE = 32`：跨文章收集句子后批量推理。
+- 标签映射使用 `model.config.id2label` 动态解析，并在启动时做映射测试，避免把 `negative` 和 `neutral` 的概率静默互换。
 
 命令行抓取真实 RSS 新闻：
 
@@ -109,45 +77,61 @@ streamlit run app.py
 python -m src.news_collector
 ```
 
-也可以在 Streamlit 侧边栏点击“抓取最新新闻”。真实新闻模式下如果数据为空，页面会提示先抓取或切换回 Demo 数据。
+也可以在 Streamlit 侧边栏点击“抓取最新新闻”。真实数据文件非空时，页面默认使用真实新闻；真实数据为空或不可读时，系统会提示并回落到 Demo 数据。
 
-如果 Windows 默认 `python` 被 Python Manager 拦截，可以改用本机 Python 3.12 的完整路径创建环境或执行 pip。
+## 7. 云端部署
 
-## 7. 如何部署到 Streamlit Community Cloud
+Streamlit Community Cloud 等无 GPU 云端部署使用 `requirements-full.txt`。该文件固定安装 CPU 版 torch，便于部署环境稳定复现；本地安装不要直接运行它，请使用 `python setup_env.py` 自动选择 CPU/GPU 版本。
 
-1. 将项目推送到 GitHub 仓库。
-2. 在 Streamlit Community Cloud 新建应用。
-3. 入口文件选择 `sector_sentiment_dashboard/app.py`。
-4. Python 版本选择 3.12。
-5. 默认只安装 `requirements.txt`，先运行 demo 模式。
+## 8. 当前限制
 
-## 8. 环境变量/API key 设置
+- FinBERT 是可选引擎；没有本地模型缓存或依赖时会回退词典模型。
+- RSS 摘要可能很短，证据句质量受来源摘要质量限制。
+- 宏观/市场级 Unmapped 新闻当前主要进入文章浏览和市场驱动展示；不强行摊入 11 个板块聚合。
+- 评估模块当前只做覆盖统计、输出分布和人工标注 CSV 准确率，不包含消融或敏感性分析。
+- 当前不提供投资建议，也不用于实时交易。
 
-当前阶段不需要 API key。
+## 9. 后续方向
 
-后续如果接入 OpenAI、Gemini 或其他 LLM 摘要服务，建议使用环境变量保存密钥，例如：
+- 扩展 evaluation：消融、敏感性分析、更多标注字段。
+- 更完整的 Top Drivers 解释和宏观新闻处理策略。
 
-```bash
-OPENAI_API_KEY=your_key_here
-GEMINI_API_KEY=your_key_here
+## 10. 每日市场简报与调度
+
+系统已加入“抓取多次/天、简报一次/天”的解耦机制：
+
+- `python -m src.news_collector` 每次运行会抓取 RSS、累积写入 `data/raw_articles.csv`，并只对新增 `article_id` 运行映射、标签、情绪和评分管线；日志会输出“本次新增 N 条，复用 M 条”。
+- 每次处理完成后会刷新 `data/sector_daily_scores.csv` 和 `data/market_daily_scores.csv`。同一 UTC 日期重跑会覆盖当天行，历史行不动；Sector Detail 的 7/30 天趋势优先读取这些快照。
+- 简报门闸由 `BRIEF_GENERATION_HOUR_LOCAL` 控制。当前时间已过本地生成时刻且今天尚未生成过简报时，才会写入 `data/latest_brief.md`，并按日期归档到 `data/briefs/`。
+- LLM 简报使用 OpenAI 官方 Python SDK，API key 从环境变量 `OPENAI_API_KEY` 读取。调用前会用 `models.list()` 核实 `LLM_MODEL_BRIEF` 是否为当前账户实际可用的模型 ID；没有 key、SDK 不可用、模型不可用或调用失败时都会回退到规则模板，管线不会崩溃。Streamlit 页面渲染路径只读取 `latest_brief.md`，不会自动调用 LLM API。
+- RSS 只覆盖最近几天的新闻，30 天趋势需要连续多日运行抓取来积累；短期内真实新闻模式下趋势图稀疏是预期行为。
+
+本地启用 LLM 前可在 PowerShell 设置：
+
+```powershell
+$env:OPENAI_API_KEY="your_api_key"
 ```
 
-没有 API key 时，系统必须继续使用规则模板生成中文摘要。
+注册 Windows 任务计划程序，每 4 小时抓取一次：
 
-## 9. 项目限制
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup_schedule.ps1
+```
 
-- 当前 demo 数据是模板生成的课程展示数据，还不能代表真实市场新闻覆盖。
-- 当前使用离线词典情绪模型 fallback，还不是 FinBERT 输出。
-- 当前文章级 risk_intensity 是 baseline 公式：以风险类别严重度为主体，并加入负向情绪压力和不确定性压力；它不是人工标注校准后的最终风险模型。
-- 当前不提供投资建议，也不用于实时交易。
-- 真实新闻抓取、长文本分句、证据句提取和模型评估会在后续阶段实现。
+查看任务：
 
-## 10. 免责声明
+```powershell
+Get-ScheduledTask -TaskName SectorSentimentRSSCollector
+```
 
-本系统仅用于教育和研究演示，不构成投资建议。
+删除任务：
 
-## 11. 未来改进方向
+```powershell
+Unregister-ScheduledTask -TaskName SectorSentimentRSSCollector -Confirm:$false
+```
 
-- 接入可选 FinBERT/Hugging Face 推理接口。
-- 增加 evaluation 脚本和人工标注 CSV 接口。
-- 增加可选 RSS 新闻抓取和 CSV 上传。
+## 11. 存储分层与工作集窗口
+
+- `data/raw_articles.csv` 永久保留，不做自动清理，方便第二阶段人工标注抽样。文件超过 50MB 时，系统会在日志中提示建议迁移 SQLite；当前版本暂不执行迁移。
+- 仪表盘默认只加载 `WORKING_SET_DAYS = 30` 天内的已处理新闻，降低页面计算成本；Article Explorer 提供“加载全部历史”选项。
+- 每日快照表不受工作集窗口影响，会永久累积。

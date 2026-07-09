@@ -1,12 +1,14 @@
 from pathlib import Path
 
 import pandas as pd
+from pandas.errors import EmptyDataError, ParserError
 
 from src.config import (
     DATA_DIR,
     DEMO_PROCESSED_ARTICLES_PATH,
     EXPECTED_ARTICLE_COLUMNS,
     REAL_PROCESSED_ARTICLES_PATH,
+    WORKING_SET_DAYS,
 )
 
 
@@ -20,11 +22,16 @@ def empty_articles_df() -> pd.DataFrame:
 
 def _read_articles(data_path: Path) -> pd.DataFrame:
     """读取文章数据，并统一处理时间、数值和布尔字段。"""
-    df = pd.read_csv(data_path)
+    try:
+        df = pd.read_csv(data_path)
+    except (FileNotFoundError, OSError, EmptyDataError, ParserError, UnicodeDecodeError):
+        return empty_articles_df()
 
     missing_columns = [col for col in EXPECTED_ARTICLE_COLUMNS if col not in df.columns]
     if missing_columns:
-        raise ValueError(f"{data_path.name} 缺少字段: {missing_columns}")
+        for column in missing_columns:
+            df[column] = ""
+    df = df.reindex(columns=EXPECTED_ARTICLE_COLUMNS)
 
     for column in ["published_at", "collected_at"]:
         df[column] = pd.to_datetime(df[column], utc=True, errors="coerce")
@@ -55,31 +62,53 @@ def _read_articles(data_path: Path) -> pd.DataFrame:
     return df
 
 
-def load_demo_articles() -> pd.DataFrame:
+def filter_working_set(df: pd.DataFrame, load_all_history: bool = False) -> pd.DataFrame:
+    if load_all_history or df.empty or "published_at" not in df:
+        return df
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=WORKING_SET_DAYS)
+    return df[df["published_at"].isna() | (df["published_at"] >= cutoff)].copy()
+
+
+def load_demo_articles(load_all_history: bool = False) -> pd.DataFrame:
     """读取原始 demo 新闻数据。"""
-    return _read_articles(DATA_DIR / "demo_articles.csv")
+    return filter_working_set(_read_articles(DATA_DIR / "demo_articles.csv"), load_all_history)
 
 
-def load_processed_articles() -> pd.DataFrame:
+def load_processed_articles(load_all_history: bool = False) -> pd.DataFrame:
     """读取经过 UTC 标准化和去重标记后的新闻数据。"""
-    return _read_articles(DEMO_PROCESSED_ARTICLES_PATH)
+    return filter_working_set(_read_articles(DEMO_PROCESSED_ARTICLES_PATH), load_all_history)
 
 
-def load_real_articles() -> pd.DataFrame:
+def load_real_articles(load_all_history: bool = False) -> pd.DataFrame:
     """读取 RSS 抓取并处理后的真实新闻数据。"""
     if not REAL_PROCESSED_ARTICLES_PATH.exists() or REAL_PROCESSED_ARTICLES_PATH.stat().st_size == 0:
         return empty_articles_df()
     real_df = _read_articles(REAL_PROCESSED_ARTICLES_PATH)
-    return real_df
+    return filter_working_set(real_df, load_all_history)
 
 
-def load_articles(source_mode: str = DEMO_DATA_LABEL, prefer_processed: bool = True) -> pd.DataFrame:
+def has_real_articles() -> bool:
+    """判断真实新闻处理结果是否存在且至少包含一条数据。"""
+    if not REAL_PROCESSED_ARTICLES_PATH.exists() or REAL_PROCESSED_ARTICLES_PATH.stat().st_size == 0:
+        return False
+    try:
+        preview = pd.read_csv(REAL_PROCESSED_ARTICLES_PATH, nrows=1)
+    except (OSError, EmptyDataError, ParserError, UnicodeDecodeError):
+        return False
+    return not preview.empty
+
+
+def load_articles(
+    source_mode: str = REAL_DATA_LABEL,
+    prefer_processed: bool = True,
+    load_all_history: bool = False,
+) -> pd.DataFrame:
     """页面统一读取入口：根据侧边栏选择加载 demo 或真实新闻。"""
     if source_mode == REAL_DATA_LABEL:
-        return load_real_articles()
+        return load_real_articles(load_all_history=load_all_history)
 
     if prefer_processed and DEMO_PROCESSED_ARTICLES_PATH.exists() and DEMO_PROCESSED_ARTICLES_PATH.stat().st_size > 0:
-        processed_df = load_processed_articles()
+        processed_df = load_processed_articles(load_all_history=load_all_history)
         if not processed_df.empty:
             return processed_df
-    return load_demo_articles()
+    return load_demo_articles(load_all_history=load_all_history)

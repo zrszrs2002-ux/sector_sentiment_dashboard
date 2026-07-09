@@ -1,7 +1,6 @@
 """文章级六维基础分数。
 
-第三阶段先根据词典情绪 fallback 和风险标签生成单篇新闻分数。第四阶段
-再把这些分数扩展为正式的板块级/市场级加权聚合。
+根据情绪概率、风险标签、时间衰减和相关性生成单篇新闻分数。
 """
 
 from __future__ import annotations
@@ -10,7 +9,11 @@ import math
 from datetime import UTC, datetime
 
 from src.config import (
+    RISK_NEGATIVE_PRESSURE_WEIGHT,
     RISK_SEVERITY_WEIGHTS,
+    RISK_SENTIMENT_SEVERITY_WEIGHT,
+    RISK_UNCERTAINTY_PRESSURE_WEIGHT,
+    RISK_USE_SENTIMENT_PRESSURE,
     TIME_DECAY_TAU_HOURS,
     UNCERTAINTY_ENTROPY_WEIGHT,
     UNCERTAINTY_NEUTRAL_WEIGHT,
@@ -40,8 +43,14 @@ def calculate_uncertainty(sentiment: ArticleSentiment) -> float:
 
 
 def calculate_time_weight(published_at: str, collected_at: str) -> float:
-    published = parse_utc_datetime(published_at)
-    collected = parse_utc_datetime(collected_at) if collected_at else datetime.now(UTC)
+    try:
+        published = parse_utc_datetime(published_at)
+    except (TypeError, ValueError):
+        published = datetime.now(UTC)
+    try:
+        collected = parse_utc_datetime(collected_at) if collected_at else datetime.now(UTC)
+    except (TypeError, ValueError):
+        collected = datetime.now(UTC)
     age_hours = max((collected - published).total_seconds() / 3600, 0)
     return math.exp(-age_hours / TIME_DECAY_TAU_HOURS)
 
@@ -49,9 +58,16 @@ def calculate_time_weight(published_at: str, collected_at: str) -> float:
 def calculate_risk_intensity(risk_category: str, sentiment: ArticleSentiment) -> float:
     severity = RISK_SEVERITY_WEIGHTS.get(risk_category, 3)
     severity_score = severity / 5 * 100
-    negative_pressure = max(sentiment.p_negative - sentiment.p_positive, 0) * 35
-    uncertainty_pressure = sentiment.p_neutral * 10
-    return clamp(severity_score * 0.75 + negative_pressure + uncertainty_pressure)
+    if not RISK_USE_SENTIMENT_PRESSURE:
+        return clamp(severity_score)
+
+    negative_pressure = max(sentiment.p_negative - sentiment.p_positive, 0) * RISK_NEGATIVE_PRESSURE_WEIGHT
+    uncertainty_pressure = sentiment.p_neutral * RISK_UNCERTAINTY_PRESSURE_WEIGHT
+    return clamp(
+        severity_score * RISK_SENTIMENT_SEVERITY_WEIGHT
+        + negative_pressure
+        + uncertainty_pressure
+    )
 
 
 def score_article(
