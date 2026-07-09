@@ -138,13 +138,6 @@
 - 具体做了什么：运行 Python 3.12 `compileall` 语法检查，覆盖 `src`、`pages`、`app.py` 和 `setup_env.py`，检查通过。基于现有 `processed_articles.csv` 写入 Demo 每日快照；对 `raw_articles.csv` / `real_processed_articles.csv` 运行 `process_articles_incremental()`，本次新增 0 条，复用 1201 条，处理后总计 1201 条。显式清空 `ANTHROPIC_API_KEY` 后强制生成一次简报，验证无 key 时会回退规则模板并写入 `data/latest_brief.md` 与 `data/briefs/2026-07-10.md`。检查 `data/sector_daily_scores.csv` 当前 22 行（Demo/真实新闻各 11 个板块），`data/market_daily_scores.csv` 当前 2 行（Demo/真实新闻各 1 行）。验证 `maybe_generate_daily_brief()` 在当前本地时间未到 8:00 时会跳过生成；验证 `scripts/setup_schedule.ps1` 可被 PowerShell 解析。
 - 当前项目状态：本轮功能验证通过。由于验证时刻早于本地 8:00，`latest_brief.md` 是一次手动强制生成的规则模板简报；后续有 `ANTHROPIC_API_KEY` 时可通过侧边栏确认按钮重新生成 AI 简报。
 
-## 2026-07-10 03:35
-
-- 阶段名称 / 本次操作目标：每日简报 LLM 供应商切换到 OpenAI API
-- 具体做了什么：`src/llm_summary.py` 从 Anthropic SDK 改为 OpenAI 官方 Python SDK，API key 改从 `OPENAI_API_KEY` 读取，并使用 Responses API 传入既有接地系统提示词和 JSON 数据包。新增 `LLM_MODEL_BRIEF`、`LLM_MODEL_SECTOR_SUMMARY`、`LLM_MODEL_CHAT` 三个按任务配置项；当前简报期望模型为 `gpt-5.6-terra`，保留 `LLM_MODEL` 作为兼容别名。每次生成前先调用 `client.models.list()`，仅当精确模型 ID 出现在账户实际返回列表中时才调用生成接口；不匹配时输出中文原因并回退规则模板，不会将猜测的模型 ID 发给 API。原有门闸、规则降级、接地提示词、免责声明补全、文件归档和页面只读设计保持不变。
-- 依赖与文档：`requirements.txt` 用 `openai>=1.66.0,<2.0.0` 替换 Anthropic 依赖；README 的环境变量和模型校验说明同步改为 OpenAI；侧边栏强制生成确认文案改为 `OPENAI_API_KEY`。
-- 验证说明：当前 Python 环境未安装 OpenAI SDK，且未检测到 `OPENAI_API_KEY`，因此无法在本次环境中实际调用 `/v1/models` 获得账户模型 ID。代码会在后续有 key 的首次生成前执行该校验；若 `gpt-5.6-terra` 不在返回列表中，将安全回退并提示用 API 实际返回的 ID 更新 `LLM_MODEL_BRIEF`。已运行 `compileall`，并以离线 Fake OpenAI client 验证：无 key 时规则降级；模型可用时调用顺序严格为 `models.list()` 后 `responses.create()`；模型不在清单中时不会调用生成接口。
-
 ## 2026-07-10 03:17
 
 - 阶段名称 / 本次操作目标：简报阶段收尾补丁（UI 与冷启动修复）
@@ -152,3 +145,15 @@
 - 简报模板修复：`generate_rule_brief_from_payload()` 不再输出“较前一日暂无”；当前一日快照不存在时，差值子句整体省略，并在数据覆盖说明中写入“暂无前一日对比基准，异动对比将于明日起可用”。
 - 验证结果：Python `compileall` 通过；当前 Streamlit 版本 1.58.0 支持 `st.container(height=..., border=...)`；无 API key 情况下强制生成规则模板简报成功，确认 `latest_brief.md` 不含“较前一日暂无”，且包含数据覆盖基准说明。当前真实新闻样例板块快照天数为 1，因此趋势页会走冷启动提示 + 当日数值表格路径。
 - 时区核查：`brief_generator._local_now()` 使用 `datetime.now().astimezone()`，即系统本地时区；本机返回 `澳大利亚东部标准时间`，UTC offset 为 `+10:00`。`BRIEF_GENERATION_HOUR_LOCAL = 8` 的 scheduled time 由同一个 aware datetime `replace(hour=8, ...)` 生成，因此门闸按系统本地 08:00 触发，不会因为 UTC/本地时间混用提前或滞后触发。当前核查时刻为 `2026-07-10T03:16:55+10:00`，门闸判断为未过 08:00。
+
+## 2026-07-10 03:35
+
+- 阶段名称 / 本次操作目标：每日简报 LLM 供应商切换到 OpenAI API
+- 具体做了什么：`src/llm_summary.py` 从 Anthropic SDK 改为 OpenAI 官方 Python SDK，API key 改从 `OPENAI_API_KEY` 读取，并使用 Responses API 传入既有接地系统提示词和 JSON 数据包。新增 `LLM_MODEL_BRIEF`、`LLM_MODEL_SECTOR_SUMMARY`、`LLM_MODEL_CHAT` 三个按任务配置项；当前简报期望模型为 `gpt-5.6-terra`，保留 `LLM_MODEL` 作为兼容别名。每次生成前先调用 `client.models.list()`，仅当精确模型 ID 出现在账户实际返回列表中时才调用生成接口；不匹配时输出中文原因并回退规则模板，不会将猜测的模型 ID 发给 API。原有门闸、规则降级、接地提示词、免责声明补全、文件归档和页面只读设计保持不变。
+- 依赖与文档：`requirements.txt` 用 `openai>=1.66.0,<2.0.0` 替换 Anthropic 依赖；README 的环境变量和模型校验说明同步改为 OpenAI；侧边栏强制生成确认文案改为 `OPENAI_API_KEY`。
+- 验证说明：当前 Python 环境未安装 OpenAI SDK，且未检测到 `OPENAI_API_KEY`，因此无法在本次环境中实际调用 `/v1/models` 获得账户模型 ID。代码会在后续有 key 的首次生成前执行该校验；若 `gpt-5.6-terra` 不在返回列表中，将安全回退并提示用 API 实际返回的 ID 更新 `LLM_MODEL_BRIEF`。已运行 `compileall`，并以离线 Fake OpenAI client 验证：无 key 时规则降级；模型可用时调用顺序严格为 `models.list()` 后 `responses.create()`；模型不在清单中时不会调用生成接口。
+
+## 2026-07-10 07:07
+
+- 阶段名称 / 本次操作目标：OpenAI 简报模型 ID 修正
+- 具体做了什么：根据账户实测的 `models.list()` 结果，将 `LLM_MODEL_BRIEF` 改为当前可用的 `gpt-5.5`，并让兼容配置 `LLM_MODEL` 同步指向该值。保留现有模型清单校验、Responses API、门闸和规则模板降级逻辑不变；模型不可用时的提示改为根据当前配置动态显示对应模型家族。账户获得权限后可将 `LLM_MODEL_BRIEF` 切回 `gpt-5.6-terra`。

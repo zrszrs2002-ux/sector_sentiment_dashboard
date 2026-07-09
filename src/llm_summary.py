@@ -132,8 +132,9 @@ def _resolve_brief_model(client: Any) -> str:
     if LLM_MODEL_BRIEF in available_ids:
         return LLM_MODEL_BRIEF
 
-    gpt56_ids = sorted(model_id for model_id in available_ids if model_id.startswith("gpt-5.6"))
-    preview = ", ".join(gpt56_ids) if gpt56_ids else "无可用 gpt-5.6 模型"
+    model_family = LLM_MODEL_BRIEF.rsplit("-", 1)[0]
+    family_ids = sorted(model_id for model_id in available_ids if model_id.startswith(model_family))
+    preview = ", ".join(family_ids) if family_ids else f"无可用 {model_family} 模型"
     raise RuntimeError(
         f"简报模型 {LLM_MODEL_BRIEF!r} 不在当前 OpenAI 账户的模型列表中（{preview}）。"
         "请根据 API 返回的实际模型 ID 更新 LLM_MODEL_BRIEF。"

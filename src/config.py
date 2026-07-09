@@ -129,10 +129,11 @@ FINBERT_MAX_LENGTH = 128
 FINBERT_BATCH_SIZE = 32
 
 LLM_ENABLED = True
-# Legacy default retained for existing integrations. The runtime first verifies
-# this exact ID through OpenAI's models.list() response before generation.
-LLM_MODEL = "gpt-5.6-terra"
-LLM_MODEL_BRIEF = LLM_MODEL
+# The runtime verifies this exact ID through OpenAI's models.list() before
+# generation. Switch back to gpt-5.6-terra after the account receives access.
+LLM_MODEL_BRIEF = "gpt-5.5"
+# Backward-compatible alias for integrations that still import LLM_MODEL.
+LLM_MODEL = LLM_MODEL_BRIEF
 # Reserved task-specific defaults for the upcoming sector-summary and chat features.
 LLM_MODEL_SECTOR_SUMMARY = "gpt-5.6-luna"
 LLM_MODEL_CHAT = "gpt-5.6-luna"
