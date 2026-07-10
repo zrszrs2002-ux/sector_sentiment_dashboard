@@ -2,23 +2,28 @@ import os
 from pathlib import Path
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
 def _env_int(name: str, default: int, minimum: int = 1) -> int:
     try:
         return max(minimum, int(os.getenv(name, str(default))))
     except (TypeError, ValueError):
         return default
+
+
+def get_finbert_loading_mode() -> str:
+    value = os.getenv("FINBERT_LOCAL_FILES_ONLY", "auto").strip().lower()
+    return "offline" if value in {"1", "true", "yes", "on"} else "auto"
+
+
+def get_finbert_batch_size() -> int:
+    return _env_int("FINBERT_BATCH_SIZE", 32)
+
+
+def get_demo_pin() -> str:
+    return os.getenv("DEMO_PIN", "").strip()
+
+
+def get_hf_token() -> str:
+    return os.getenv("HF_TOKEN", "").strip()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -140,16 +145,14 @@ RISK_SENTIMENT_SEVERITY_WEIGHT = 0.75
 RISK_NEGATIVE_PRESSURE_WEIGHT = 35
 RISK_UNCERTAINTY_PRESSURE_WEIGHT = 10
 
-# FinBERT 默认只读取本地缓存；模型或依赖不可用时会回退词典模型并给中文提示。
+# FinBERT 默认先读固定 revision 的本地缓存，未命中时自动下载；显式离线时只读缓存。
 SENTIMENT_ENGINE = "finbert"
 SENTIMENT_DEVICE = "auto"
 FINBERT_MODEL_NAME = "ProsusAI/finbert"
-FINBERT_LOCAL_FILES_ONLY = _env_bool("FINBERT_LOCAL_FILES_ONLY", True)
+FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 FINBERT_MAX_LENGTH = 128
-FINBERT_BATCH_SIZE = _env_int("FINBERT_BATCH_SIZE", 32)
 
 LLM_ENABLED = True
-DEMO_PIN = os.getenv("DEMO_PIN", "").strip()
 # The runtime verifies this exact ID through OpenAI's models.list() before
 # generation. Switch back to gpt-5.6-terra after the account receives access.
 LLM_MODEL_BRIEF = "gpt-5.5"

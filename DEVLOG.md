@@ -166,3 +166,12 @@
 - 页面保护与模型体验：云端允许下载且 FinBERT 尚未加载时，用“首次启动正在下载 FinBERT 模型（约 440MB），请稍候…” spinner 包裹首次加载；现有模型加载异常捕获继续回退词典模型。`DEMO_PIN` 非空时，侧边栏强制重新生成简报需要输入正确口令，错误口令不会进入 `generate_daily_brief()`；为空时保持本地原行为。
 - 文档与云端限制：README 改为 Community Cloud 使用根目录 `requirements.txt`，列出 `OPENAI_API_KEY`、`FINBERT_LOCAL_FILES_ONLY="0"`、`FINBERT_BATCH_SIZE="8"`、`DEMO_PIN` 四项 Secrets，说明首次模型下载耗时、CPU 推理较慢、加载失败降级，以及容器文件系统和模型缓存易失；公开演示基准数据以仓库提交为准。
 - 验证结果：`compileall` 通过；依赖逐行结构和 `setup_env.py` 过滤器检查通过；云端环境值与本地默认值检查通过；AST 检查确认 Secrets 桥接发生在配置导入前，错误 PIN 分支不会调用简报生成；本地无 Secrets 文件的异常类型可被静默处理。运行时代码 `src/`、`pages/`、`app.py` 的 Windows 盘符、`python.exe`、PowerShell、`cmd.exe`、`nvidia-smi`、`.ps1` 扫描命中数为 0，云端 Linux 运行路径不依赖 Windows 专属路径或命令。本轮未安装云端 CPU requirements，避免覆盖已验证的本地 GPU torch。
+
+## 2026-07-11 03:11
+
+- 阶段名称 / 本次操作目标：FinBERT 两段式加载与云端缓存未命中根治补丁
+- 模型加载：`load_finbert_resources()` 不再依赖预先判定的布尔开关，而是始终先以 `local_files_only=True` 读取缓存；仅在确认缓存未命中时才以 `local_files_only=False` 重试。Streamlit 运行上下文中的第二段下载由 `st.spinner("首次启动正在下载 FinBERT 模型（约 440MB），请稍候…")` 包裹，命令行运行则打印同一提示；下载或其他加载错误仍由原有外层异常处理回退词典模型。`FINBERT_LOCAL_FILES_ONLY` 默认改为 `auto`，仅显式设为 `1`（以及等价真值）时启用严格离线并禁止第二段重试。
+- 版本与鉴权：根据 Hugging Face 官方 `ProsusAI/finbert` main 历史锁定 `FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"`；tokenizer 和分类模型的缓存读取、联网下载均传入同一 revision。新增惰性 `HF_TOKEN` 读取，非空时传给两个 `from_pretrained()`，未配置时不传 `token` 参数，保持原行为。
+- Secrets 与惰性配置：`app.py` 在 `st.set_page_config()` 和所有 `src.*` 导入前完成 `st.secrets → os.environ.setdefault` 桥接。检查 `config.py` 全部 `os.getenv` 后，将 FinBERT 加载模式、批大小、`DEMO_PIN` 和 `HF_TOKEN` 全部改为调用时读取；OpenAI key 原本已在简报调用时读取。这样即使配置模块较早导入，桥接后的 Secrets 仍不会因模块级常量定型而失效。
+- 文档：README 改为说明默认两段式加载、严格离线开关、可选 `HF_TOKEN` 和固定 revision；云端 Secrets 示例删除不再需要的 `FINBERT_LOCAL_FILES_ONLY="0"`。
+- 验证结果：`compileall` 通过；离线 fake loader 验证缓存命中不下载、缓存未命中按本地/联网顺序重试、spinner 只包裹第二段、严格离线禁止重试、`HF_TOKEN` 可选且 revision 在两段保持一致；模拟下载失败确认回退词典模型。AST 检查确认 Secrets 桥接早于页面配置和所有 `src` 导入，`config.py` 无模块级 `os.getenv` 求值。Windows 专属运行路径扫描为 0，凭据模式扫描为 0。本轮未进行真实联网下载，等待 Streamlit Cloud Reboot 实测。

@@ -5,12 +5,6 @@ from pathlib import Path
 import streamlit as st
 
 
-st.set_page_config(
-    page_title="自动化板块级金融舆情雷达系统",
-    layout="wide",
-)
-
-
 def bridge_streamlit_secrets() -> None:
     try:
         for key, value in st.secrets.items():
@@ -25,11 +19,16 @@ def bridge_streamlit_secrets() -> None:
 
 bridge_streamlit_secrets()
 
-from src.config import DEMO_PIN, DISCLAIMER, FINBERT_LOCAL_FILES_ONLY
+st.set_page_config(
+    page_title="自动化板块级金融舆情雷达系统",
+    layout="wide",
+)
+
+from src.config import DISCLAIMER, get_demo_pin
 from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL, has_real_articles
 from src.brief_generator import generate_daily_brief
 from src.news_collector import collect_rss_news
-from src.sentiment_model import load_finbert_resources, sentiment_backend_status
+from src.sentiment_model import sentiment_backend_status
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,12 +36,7 @@ BASE_DIR = Path(__file__).resolve().parent
 st.sidebar.title("板块级金融舆情雷达")
 st.sidebar.caption("公开财经新闻舆情监测工具")
 st.sidebar.info(DISCLAIMER)
-if not FINBERT_LOCAL_FILES_ONLY and load_finbert_resources.cache_info().currsize == 0:
-    with st.spinner("首次启动正在下载 FinBERT 模型（约 440MB），请稍候…"):
-        sentiment_status = sentiment_backend_status()
-else:
-    sentiment_status = sentiment_backend_status()
-st.sidebar.caption(sentiment_status)
+st.sidebar.caption(sentiment_backend_status())
 
 real_available = has_real_articles()
 source_options = [REAL_DATA_LABEL, DEMO_DATA_LABEL]
@@ -93,12 +87,13 @@ if st.sidebar.button("立即重新生成简报"):
 
 if st.session_state.get("confirm_force_brief"):
     st.sidebar.warning("确认后会无视每日门闸并调用简报生成流程；若 OPENAI_API_KEY 可用，可能产生 API 费用。")
+    demo_pin = get_demo_pin()
     pin_matches = True
-    if DEMO_PIN:
+    if demo_pin:
         entered_pin = st.sidebar.text_input("访问口令", type="password", key="force_brief_pin")
-        pin_matches = hmac.compare_digest(entered_pin, DEMO_PIN)
+        pin_matches = hmac.compare_digest(entered_pin, demo_pin)
     if st.sidebar.button("确认生成（可能产生费用）"):
-        if DEMO_PIN and not pin_matches:
+        if demo_pin and not pin_matches:
             st.sidebar.error("访问口令不正确，未调用简报生成接口。")
         else:
             with st.spinner("正在重新生成每日市场简报..."):

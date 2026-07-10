@@ -9,18 +9,21 @@ from __future__ import annotations
 import json
 import math
 import re
+from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from src.config import (
     DICTIONARY_DIR,
-    FINBERT_BATCH_SIZE,
-    FINBERT_LOCAL_FILES_ONLY,
     FINBERT_MAX_LENGTH,
     FINBERT_MODEL_NAME,
+    FINBERT_REVISION,
     SENTIMENT_DEVICE,
     SENTIMENT_ENGINE,
+    get_finbert_batch_size,
+    get_finbert_loading_mode,
+    get_hf_token,
 )
 from src.topic_risk_tagger import split_sentences
 
@@ -64,6 +67,7 @@ class FinbertResources:
 
 
 _FALLBACK_NOTICE_SHOWN = False
+FINBERT_DOWNLOAD_MESSAGE = "首次启动正在下载 FinBERT 模型（约 440MB），请稍候…"
 
 
 @lru_cache(maxsize=1)
@@ -127,6 +131,60 @@ def resolve_device(torch_module: Any) -> str:
     raise ValueError("SENTIMENT_DEVICE 只能是 auto/cuda/cpu")
 
 
+def pretrained_kwargs(local_files_only: bool) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "revision": FINBERT_REVISION,
+        "local_files_only": local_files_only,
+    }
+    token = get_hf_token()
+    if token:
+        kwargs["token"] = token
+    return kwargs
+
+
+def load_pretrained_pair(auto_tokenizer: Any, auto_model: Any, local_files_only: bool) -> tuple[Any, Any]:
+    kwargs = pretrained_kwargs(local_files_only)
+    tokenizer = auto_tokenizer.from_pretrained(FINBERT_MODEL_NAME, **kwargs)
+    model = auto_model.from_pretrained(FINBERT_MODEL_NAME, **kwargs)
+    return tokenizer, model
+
+
+def is_cache_miss_error(exc: Exception) -> bool:
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if isinstance(current, OSError) or current.__class__.__name__ == "LocalEntryNotFoundError":
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def finbert_download_context() -> Any:
+    print(FINBERT_DOWNLOAD_MESSAGE)
+    try:
+        import streamlit as st
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+        if get_script_run_ctx(suppress_warning=True) is not None:
+            return st.spinner(FINBERT_DOWNLOAD_MESSAGE)
+    except Exception:  # noqa: BLE001 - spinner is optional outside Streamlit runtime
+        pass
+    return nullcontext()
+
+
+def load_cached_or_download(auto_tokenizer: Any, auto_model: Any) -> tuple[Any, Any]:
+    try:
+        return load_pretrained_pair(auto_tokenizer, auto_model, local_files_only=True)
+    except Exception as cache_exc:  # noqa: BLE001 - only cache-miss errors enter the network retry
+        if not is_cache_miss_error(cache_exc):
+            raise
+        if get_finbert_loading_mode() == "offline":
+            raise RuntimeError("FinBERT 缓存未命中，且 FINBERT_LOCAL_FILES_ONLY=1 已启用严格离线模式。") from cache_exc
+        with finbert_download_context():
+            return load_pretrained_pair(auto_tokenizer, auto_model, local_files_only=False)
+
+
 @lru_cache(maxsize=1)
 def load_finbert_resources() -> FinbertResources:
     if SENTIMENT_ENGINE.lower() not in {"finbert", "auto"}:
@@ -154,14 +212,7 @@ def load_finbert_resources() -> FinbertResources:
 
     try:
         device = resolve_device(torch)
-        tokenizer = AutoTokenizer.from_pretrained(
-            FINBERT_MODEL_NAME,
-            local_files_only=FINBERT_LOCAL_FILES_ONLY,
-        )
-        model = AutoModelForSequenceClassification.from_pretrained(
-            FINBERT_MODEL_NAME,
-            local_files_only=FINBERT_LOCAL_FILES_ONLY,
-        )
+        tokenizer, model = load_cached_or_download(AutoTokenizer, AutoModelForSequenceClassification)
         label_to_index = build_label_to_index(model.config.id2label)
         validate_label_mapping(label_to_index, model.config.id2label)
         model.to(torch.device(device))
@@ -243,8 +294,9 @@ def score_sentences_finbert(sentences: list[str]) -> list[SentenceSentiment] | N
 
     results: list[SentenceSentiment] = []
     try:
-        for start in range(0, len(sentences), FINBERT_BATCH_SIZE):
-            batch_sentences = [str(sentence or "") for sentence in sentences[start : start + FINBERT_BATCH_SIZE]]
+        batch_size = get_finbert_batch_size()
+        for start in range(0, len(sentences), batch_size):
+            batch_sentences = [str(sentence or "") for sentence in sentences[start : start + batch_size]]
             inputs = resources.tokenizer(
                 batch_sentences,
                 return_tensors="pt",
@@ -351,7 +403,7 @@ def aggregate_article_sentiment(title: str, sentence_results: list[SentenceSenti
 
 
 def analyze_articles_sentiment(articles: list[tuple[str, str, str]]) -> list[ArticleSentiment]:
-    """跨文章收集所有句子后按 FINBERT_BATCH_SIZE 批量推理，再回填文章级结果。"""
+    """跨文章收集句子后按当前 FINBERT_BATCH_SIZE 环境配置批量推理。"""
     sentence_groups = [
         article_sentences(title, summary, content)
         for title, summary, content in articles
