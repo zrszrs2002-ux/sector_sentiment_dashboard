@@ -153,11 +153,9 @@ FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 FINBERT_MAX_LENGTH = 128
 
 LLM_ENABLED = True
-# The runtime verifies this exact ID through OpenAI's models.list() before
-# generation. Switch back to gpt-5.6-terra after the account receives access.
-LLM_MODEL_BRIEF = "gpt-5.5"
-# Backward-compatible alias for integrations that still import LLM_MODEL.
-LLM_MODEL = LLM_MODEL_BRIEF
+# The runtime attempts candidates in order; models.list is logging context only.
+LLM_MODEL_BRIEF_CANDIDATES = ["gpt-5.6-terra", "gpt-5.5"]
+LLM_CANDIDATE_RATE_LIMIT_RETRY_SECONDS = 5
 # Reserved task-specific defaults for the upcoming sector-summary and chat features.
 LLM_MODEL_SECTOR_SUMMARY = "gpt-5.6-luna"
 LLM_MODEL_CHAT = "gpt-5.6-luna"

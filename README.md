@@ -124,7 +124,7 @@ Community Cloud 容器文件系统具有易失性：运行期间抓取的新 RSS
 - `python -m src.news_collector` 每次运行会抓取 RSS、累积写入 `data/raw_articles.csv`，并只对新增 `article_id` 运行映射、标签、情绪和评分管线；日志会输出“本次新增 N 条，复用 M 条”。
 - 每次处理完成后会刷新 `data/sector_daily_scores.csv` 和 `data/market_daily_scores.csv`。同一 UTC 日期重跑会覆盖当天行，历史行不动；Sector Detail 的 7/30 天趋势优先读取这些快照。
 - 简报门闸由 `BRIEF_GENERATION_HOUR_LOCAL` 控制。当前时间已过本地生成时刻且今天尚未生成过简报时，才会写入 `data/latest_brief.md`，并按日期归档到 `data/briefs/`。
-- LLM 简报使用 OpenAI 官方 Python SDK，API key 从环境变量 `OPENAI_API_KEY` 读取。调用前会用 `models.list()` 核实 `LLM_MODEL_BRIEF` 是否为当前账户实际可用的模型 ID；没有 key、SDK 不可用、模型不可用或调用失败时都会回退到规则模板，管线不会崩溃。Streamlit 页面渲染路径只读取 `latest_brief.md`，不会自动调用 LLM API。
+- LLM 简报使用 OpenAI 官方 Python SDK，API key 从环境变量 `OPENAI_API_KEY` 读取。运行时按 `gpt-5.6-terra → gpt-5.5` 顺序直接发起生成请求，`models.list()` 只提供日志参考，不再是可用性硬门槛。首选模型遇到 HTTP 429 会等待 5 秒重试一次；仍被限流，或遇到模型不存在、无权限、容量/服务暂不可用时，再切换到下一候选。候选均失败、没有 key、SDK 不可用或其他调用失败时会回退规则模板，管线不会崩溃。每次生成会把候选尝试、各次结果、最终模型及原因同时打印为中文日志，并写入最新简报和日期归档元数据。AI 简报按“核心观点—市场全景—板块与事件深读—风险与明日关注点—数据范围与免责声明”组织为 900-1200 字分析晨读，并在页面署名中显示实际模型；Streamlit 页面渲染路径只读取 `latest_brief.md`，不会自动调用 LLM API。
 - RSS 只覆盖最近几天的新闻，30 天趋势需要连续多日运行抓取来积累；短期内真实新闻模式下趋势图稀疏是预期行为。
 
 本地启用 LLM 前可在 PowerShell 设置：

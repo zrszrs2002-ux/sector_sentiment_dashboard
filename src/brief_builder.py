@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 
 from src.aggregation import market_metrics, sector_metrics
-from src.config import BRIEF_WINDOW_HOURS, METRIC_COLUMNS
+from src.config import BRIEF_WINDOW_HOURS, METRIC_COLUMNS, SECTORS
 from src.daily_snapshots import load_market_snapshots, load_sector_snapshots
 from src.driver_analysis import macro_articles, top_driver_articles
 
@@ -22,6 +22,16 @@ def _iso_or_none(value: object) -> str | None:
         return pd.Timestamp(value).tz_convert("UTC").isoformat()
     except (TypeError, ValueError):
         return None
+
+
+def _round_metric(value: object) -> float:
+    try:
+        numeric = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if pd.isna(numeric):
+        return 0.0
+    return round(numeric, 1)
 
 
 def _window_articles(df: pd.DataFrame, generated_at: datetime) -> tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
@@ -61,8 +71,42 @@ def _metric_deltas(current: dict[str, float], previous: dict[str, Any] | None) -
         if previous is None:
             deltas[metric] = None
         else:
-            deltas[metric] = round(float(current.get(metric, 0) or 0) - float(previous.get(metric, 0) or 0), 3)
+            deltas[metric] = _round_metric(
+                float(current.get(metric, 0) or 0) - float(previous.get(metric, 0) or 0)
+            )
     return deltas
+
+
+def _seven_day_positions(
+    data_source: str,
+    snapshot_date,
+    current: dict[str, float],
+) -> dict[str, str]:
+    snapshots = load_market_snapshots(data_source)
+    if snapshots.empty:
+        return {}
+    history = snapshots[snapshots["snapshot_date"].notna() & (snapshots["snapshot_date"] <= snapshot_date)].copy()
+    history = history.sort_values("snapshot_date").drop_duplicates("snapshot_date", keep="last").tail(7)
+    if history["snapshot_date"].nunique() < 7:
+        return {}
+
+    labels: dict[str, str] = {}
+    for metric in METRIC_COLUMNS:
+        values = pd.to_numeric(history[metric], errors="coerce").dropna()
+        if len(values) < 7:
+            return {}
+        current_value = float(current.get(metric, 0) or 0)
+        lower_days = int((values < current_value).sum())
+        higher_days = int((values > current_value).sum())
+        if lower_days == 0 and higher_days == 0:
+            labels[metric] = "与近 7 日水平基本持平"
+        elif lower_days == 0:
+            labels[metric] = "未高于近 7 日中的任何一天"
+        elif lower_days == 7:
+            labels[metric] = "高于近 7 日全部 7 天"
+        else:
+            labels[metric] = f"高于近 7 日中 {lower_days} 天"
+    return labels
 
 
 def _sector_rankings(sector_df: pd.DataFrame) -> dict[str, list[dict[str, Any]]]:
@@ -73,7 +117,7 @@ def _sector_rankings(sector_df: pd.DataFrame) -> dict[str, list[dict[str, Any]]]
         rankings[metric] = [
             {
                 "sector": str(row.get("sector", "")),
-                "score": round(float(row.get(metric, 0) or 0), 2),
+                "score": _round_metric(row.get(metric, 0)),
                 "article_count": int(row.get("article_count", 0) or 0),
             }
             for row in sector_df.sort_values(metric, ascending=False).to_dict("records")
@@ -92,13 +136,13 @@ def _sector_movers(sector_df: pd.DataFrame, previous: pd.DataFrame) -> list[dict
             continue
         prev_row = previous_by_sector.loc[sector]
         metric_changes = {
-            metric: round(float(row.get(metric, 0) or 0) - float(prev_row.get(metric, 0) or 0), 3)
+            metric: _round_metric(float(row.get(metric, 0) or 0) - float(prev_row.get(metric, 0) or 0))
             for metric in METRIC_COLUMNS
         }
         movers.append(
             {
                 "sector": sector,
-                "total_abs_delta": round(sum(abs(value) for value in metric_changes.values()), 3),
+                "total_abs_delta": _round_metric(sum(abs(value) for value in metric_changes.values())),
                 "metric_changes": metric_changes,
             }
         )
@@ -123,12 +167,79 @@ def _drivers(df: pd.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
+def _topic_distribution(df: pd.DataFrame) -> list[dict[str, Any]]:
+    if df.empty or "topic" not in df:
+        return []
+    topics = df["topic"].fillna("").astype(str).str.strip()
+    counts = topics[topics.ne("")].value_counts().head(5)
+    return [{"topic": str(topic), "article_count": int(count)} for topic, count in counts.items()]
+
+
+def _risk_distribution(df: pd.DataFrame) -> dict[str, int]:
+    if df.empty or "risk_category" not in df:
+        return {}
+    risks = df["risk_category"].fillna("").astype(str).str.strip()
+    counts = risks[risks.ne("")].value_counts().head(5)
+    return {str(risk): int(count) for risk, count in counts.items()}
+
+
+def _sector_sentiment_counts(df: pd.DataFrame) -> list[dict[str, Any]]:
+    if df.empty or "sector" not in df or "sentiment_score" not in df:
+        return [
+            {"sector": sector, "positive_article_count": 0, "negative_article_count": 0}
+            for sector in SECTORS
+        ]
+    scores = pd.to_numeric(df["sentiment_score"], errors="coerce").fillna(0)
+    rows: list[dict[str, Any]] = []
+    for sector in SECTORS:
+        sector_scores = scores[df["sector"].astype(str).eq(sector)]
+        rows.append(
+            {
+                "sector": sector,
+                "positive_article_count": int((sector_scores > 0).sum()),
+                "negative_article_count": int((sector_scores < 0).sum()),
+            }
+        )
+    return rows
+
+
+def _display_sector(value: object) -> str:
+    sector = str(value or "").strip()
+    return "宏观/市场" if sector in {"", "Unmapped"} else sector
+
+
+def _sentiment_news_rows(df: pd.DataFrame, positive: bool) -> list[dict[str, str]]:
+    if df.empty or "sentiment_score" not in df or "title" not in df:
+        return []
+    working = df.copy()
+    working["_sentiment_score"] = pd.to_numeric(working["sentiment_score"], errors="coerce").fillna(0)
+    working = working[working["_sentiment_score"].gt(0)] if positive else working[working["_sentiment_score"].lt(0)]
+    working = working.sort_values("_sentiment_score", ascending=not positive)
+    working = working.drop_duplicates(subset=["title"], keep="first").head(3)
+    return [
+        {
+            "title": str(row.get("title", "")),
+            "sector": _display_sector(row.get("sector", "")),
+            "evidence_sentence": str(row.get("evidence_sentence", "")),
+        }
+        for row in working.to_dict("records")
+        if str(row.get("title", "")).strip()
+    ]
+
+
+def _sentiment_extremes(df: pd.DataFrame) -> dict[str, list[dict[str, str]]]:
+    return {
+        "most_positive_top3": _sentiment_news_rows(df, positive=True),
+        "most_negative_top3": _sentiment_news_rows(df, positive=False),
+    }
+
+
 def build_brief_payload(df: pd.DataFrame, data_source: str, generated_at: datetime | None = None) -> dict[str, Any]:
     generated_at = generated_at or _utc_now()
     snapshot_date = generated_at.date()
     window_df, window_start, window_end = _window_articles(df, generated_at)
 
-    market_scores = {metric: round(float(value), 3) for metric, value in market_metrics(window_df).items()}
+    market_scores = {metric: _round_metric(value) for metric, value in market_metrics(window_df).items()}
     sector_df = sector_metrics(window_df)
     previous_market = _previous_market_snapshot(data_source, snapshot_date)
     previous_sector = _previous_sector_snapshots(data_source, snapshot_date)
@@ -137,6 +248,14 @@ def build_brief_payload(df: pd.DataFrame, data_source: str, generated_at: dateti
     valid_times = window_df["published_at"].dropna() if "published_at" in window_df else pd.Series(dtype="datetime64[ns, UTC]")
     latest_collected = window_df["collected_at"].max() if "collected_at" in window_df and not window_df.empty else pd.NaT
     snapshot_id = f"{data_source}|{_iso_or_none(latest_collected) or 'no-collected-at'}|{len(window_df)}"
+
+    market_payload: dict[str, Any] = {
+        "scores": market_scores,
+        "delta_vs_previous_day": _metric_deltas(market_scores, previous_market),
+    }
+    seven_day_positions = _seven_day_positions(data_source, snapshot_date, market_scores)
+    if seven_day_positions:
+        market_payload["seven_day_position"] = seven_day_positions
 
     return {
         "generated_at": generated_at.astimezone(UTC).isoformat(timespec="seconds"),
@@ -147,18 +266,16 @@ def build_brief_payload(df: pd.DataFrame, data_source: str, generated_at: dateti
         },
         "snapshot_id": snapshot_id,
         "data_source": data_source,
-        "market": {
-            "scores": market_scores,
-            "delta_vs_previous_day": _metric_deltas(market_scores, previous_market),
-        },
+        "market": market_payload,
         "sectors": {
             "rankings": _sector_rankings(sector_df),
             "movers": _sector_movers(sector_df, previous_sector),
         },
         "top_drivers": _drivers(window_df),
-        "risk_distribution_top5": window_df["risk_category"].value_counts().head(5).to_dict()
-        if "risk_category" in window_df
-        else {},
+        "topic_distribution_top5": _topic_distribution(window_df),
+        "sector_sentiment_counts": _sector_sentiment_counts(window_df),
+        "sentiment_extremes": _sentiment_extremes(window_df),
+        "risk_distribution_top5": _risk_distribution(window_df),
         "unmapped_macro_titles": macro_df["title"].dropna().astype(str).head(5).tolist()
         if "title" in macro_df
         else [],

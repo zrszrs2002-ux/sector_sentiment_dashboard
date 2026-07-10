@@ -107,6 +107,10 @@ def generate_daily_brief(source_mode: str = REAL_DATA_LABEL, force: bool = False
         "summary_source": result.get("source", "规则模板"),
         "data_source": resolved_source,
     }
+    if result.get("model_id"):
+        metadata["model_id"] = result["model_id"]
+    if result.get("model_selection_log"):
+        metadata["model_selection_log"] = result["model_selection_log"]
     if result.get("error"):
         metadata["fallback_reason"] = result["error"]
 
@@ -117,6 +121,7 @@ def generate_daily_brief(source_mode: str = REAL_DATA_LABEL, force: bool = False
         "status": "generated",
         "message": message,
         "summary_source": metadata["summary_source"],
+        "model_id": metadata.get("model_id", ""),
         "generated_at": metadata["generated_at"],
     }
 

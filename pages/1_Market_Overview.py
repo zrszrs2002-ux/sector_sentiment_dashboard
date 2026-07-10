@@ -48,11 +48,12 @@ brief_content = str(latest_brief.get("content", "") or "")
 data_updated_at = df["collected_at"].max() if "collected_at" in df else pd.NaT
 brief_generated_at = brief_meta.get("generated_at_local") or brief_meta.get("generated_at") or ""
 summary_source = brief_meta.get("summary_source", "规则模板")
-brief_source_label = (
-    f"AI 生成 · 简报时间 {brief_generated_at}"
-    if summary_source == "AI 生成"
-    else f"规则模板 · 简报时间 {brief_generated_at or '尚未生成'}"
-)
+brief_model_id = brief_meta.get("model_id", "")
+if summary_source == "AI 生成":
+    model_label = f" · 模型 {brief_model_id}" if brief_model_id else ""
+    brief_source_label = f"AI 生成{model_label} · 简报时间 {brief_generated_at}"
+else:
+    brief_source_label = f"规则模板 · 简报时间 {brief_generated_at or '尚未生成'}"
 
 st.title("市场总览")
 st.caption("抓取可多次/天，LLM 简报默认一次/天；页面只读取已生成的 latest_brief.md。")
