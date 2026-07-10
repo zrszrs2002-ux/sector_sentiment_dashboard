@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 
+from src.config import EVENT_COVERAGE_BOOST
+from src.event_clustering import split_sources
+
 
 def macro_articles(df: pd.DataFrame) -> pd.DataFrame:
     """返回未映射到 11 个板块的宏观/市场级新闻。"""
@@ -48,23 +51,98 @@ def add_driver_scores(df: pd.DataFrame) -> pd.DataFrame:
     return scored
 
 
-def top_driver_articles(df: pd.DataFrame, limit: int = 5, macro_limit: int = 1) -> pd.DataFrame:
-    """返回重点驱动新闻，并确保 Unmapped 宏观新闻可进入展示层。"""
-    scored = add_driver_scores(df)
-    if scored.empty:
-        return scored
+def _with_event_keys(df: pd.DataFrame) -> pd.DataFrame:
+    working = df.copy()
+    if "article_id" in working:
+        fallback = working["article_id"].fillna("").astype(str)
+    else:
+        fallback = pd.Series([f"row-{index}" for index in working.index], index=working.index)
+    if "event_id" not in working:
+        working["event_id"] = fallback
+    else:
+        event_ids = working["event_id"].fillna("").astype(str).str.strip()
+        working["event_id"] = event_ids.where(event_ids.ne(""), fallback)
+    return working
 
-    top_regular = scored.sort_values("driver_score", ascending=False).head(limit)
-    top_macro = macro_articles(scored).sort_values("driver_score", ascending=False).head(macro_limit)
+
+def _representative(group: pd.DataFrame) -> pd.Series:
+    ranked = group.copy()
+    weights = ranked["agg_weight"] if "agg_weight" in ranked else pd.Series(0, index=ranked.index)
+    ranked["_agg_weight"] = pd.to_numeric(weights, errors="coerce").fillna(0)
+    if "article_id" not in ranked:
+        ranked["article_id"] = ranked.index.astype(str)
+    ranked["_article_id"] = ranked["article_id"].fillna("").astype(str)
+    return ranked.sort_values(["_agg_weight", "_article_id"], ascending=[False, True]).iloc[0].copy()
+
+
+def _distinct_source_count(group: pd.DataFrame) -> int:
+    sources: set[str] = set()
+    if "source" in group:
+        for value in group["source"]:
+            sources.update(split_sources(value))
+    stored_count = 0
+    if "source_count" in group:
+        values = pd.to_numeric(group["source_count"], errors="coerce").fillna(0)
+        stored_count = int(values.max()) if not values.empty else 0
+    return max(len(sources), stored_count)
+
+
+def collapse_articles_by_event(df: pd.DataFrame) -> pd.DataFrame:
+    """Return one highest-agg-weight representative per persisted event ID."""
+    if df.empty:
+        return df.copy()
+
+    working = _with_event_keys(df)
+    rows: list[dict[str, object]] = []
+    article_fields = ["article_id", "title", "source", "published_at", "url", "agg_weight"]
+    if "driver_score" in working:
+        article_fields.append("driver_score")
+
+    for event_id, group in working.groupby("event_id", sort=False, dropna=False):
+        representative = _representative(group)
+        row = representative.drop(labels=["_agg_weight", "_article_id"], errors="ignore").to_dict()
+        row["event_id"] = str(event_id)
+        row["event_article_count"] = int(len(group))
+        row["source_count"] = _distinct_source_count(group)
+        row["event_articles"] = group.sort_values("published_at", ascending=False, na_position="last").reindex(
+            columns=article_fields
+        ).to_dict("records")
+        if "driver_score" in group:
+            article_scores = pd.to_numeric(group["driver_score"], errors="coerce").fillna(0)
+            row["representative_driver_score"] = float(representative.get("driver_score", 0) or 0)
+            row["driver_score"] = float(article_scores.max())
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def event_driver_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Build event-level driver rows without mutating article aggregation fields."""
+    events = collapse_articles_by_event(add_driver_scores(df))
+    if events.empty:
+        return events
+
+    source_counts = pd.to_numeric(events["source_count"], errors="coerce").fillna(0)
+    events["coverage_boost_applied"] = source_counts.ge(3)
+    events["driver_score"] = pd.to_numeric(events["driver_score"], errors="coerce").fillna(0)
+    events.loc[events["coverage_boost_applied"], "driver_score"] *= EVENT_COVERAGE_BOOST
+    events["driver_score"] = events["driver_score"].clip(upper=100 * EVENT_COVERAGE_BOOST)
+    events.loc[events["coverage_boost_applied"], "driver_reason"] = events.loc[
+        events["coverage_boost_applied"], "driver_reason"
+    ].astype(str) + f" 覆盖至少 3 家媒体，事件分数乘以 {EVENT_COVERAGE_BOOST:.2f}。"
+    return events
+
+
+def top_driver_articles(df: pd.DataFrame, limit: int = 5, macro_limit: int = 1) -> pd.DataFrame:
+    """返回重点驱动事件，并确保 Unmapped 宏观事件可进入展示层。"""
+    events = event_driver_rows(df)
+    if events.empty:
+        return events
+
+    top_regular = events.sort_values("driver_score", ascending=False).head(limit)
+    top_macro = macro_articles(events).sort_values("driver_score", ascending=False).head(macro_limit)
     if top_macro.empty:
         return top_regular
 
-    if "article_id" in scored:
-        macro_ids = set(top_macro["article_id"].astype(str))
-        regular_fill = top_regular[~top_regular["article_id"].astype(str).isin(macro_ids)]
-    else:
-        macro_keys = set(zip(top_macro["url"].astype(str), top_macro["title"].astype(str), strict=True))
-        regular_fill = top_regular[
-            ~top_regular.apply(lambda row: (str(row.get("url", "")), str(row.get("title", ""))) in macro_keys, axis=1)
-        ]
+    macro_ids = set(top_macro["event_id"].astype(str))
+    regular_fill = top_regular[~top_regular["event_id"].astype(str).isin(macro_ids)]
     return pd.concat([top_macro, regular_fill], ignore_index=True).head(limit)

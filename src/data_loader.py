@@ -54,6 +54,7 @@ def _read_articles(data_path: Path) -> pd.DataFrame:
         "time_weight",
         "agg_weight",
         "dedup_factor",
+        "source_count",
     ]
     for column in numeric_columns:
         df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0)

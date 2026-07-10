@@ -13,16 +13,22 @@ CPU_INDEX_URL = "https://download.pytorch.org/whl/cpu"
 
 
 def local_requirements() -> list[str]:
-    """Read shared app dependencies while excluding cloud-only ML packages."""
-    path = Path(__file__).with_name("requirements.txt")
+    """Read base plus local full-feature dependencies without replacing torch."""
+    root = Path(__file__).parent
+    paths = [root / "requirements.txt", root / "requirements-full.txt"]
     excluded_prefixes = ("--extra-index-url", "torch==", "transformers==")
-    return [
-        line
-        for raw_line in path.read_text(encoding="utf-8-sig").splitlines()
-        if (line := raw_line.strip())
-        and not line.startswith("#")
-        and not line.startswith(excluded_prefixes)
-    ]
+    dependencies: list[str] = []
+    for path in paths:
+        if not path.exists():
+            continue
+        dependencies.extend(
+            line
+            for raw_line in path.read_text(encoding="utf-8-sig").splitlines()
+            if (line := raw_line.strip())
+            and not line.startswith("#")
+            and not line.startswith(excluded_prefixes)
+        )
+    return list(dict.fromkeys(dependencies))
 
 def run(command: list[str]) -> None:
     print("执行：", " ".join(command))

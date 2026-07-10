@@ -1,0 +1,4 @@
+# 本文件是本地完整功能附加依赖，由 python setup_env.py 自动读取。
+# sentence-transformers 5.6.0（2026-06-16 发布）用于事件级 embedding 聚类；
+# 不引用云端 requirements.txt，避免覆盖本机已安装的 GPU 版 torch。
+sentence-transformers==5.6.0

@@ -199,3 +199,16 @@
 - 降级与重试：首选模型首次返回 429 时等待 `LLM_CANDIDATE_RATE_LIMIT_RETRY_SECONDS = 5` 秒并重试一次；再次失败才切换下一候选。模型不存在、无权限、429、容量或服务暂不可用会进入下一候选；其他错误直接进入规则模板，避免对明显的全局参数错误重复请求。所有候选失败后才走既有规则模板降级，管线不抛出外部 API 异常。
 - 可追溯日志：每次生成均记录 `models.list` 参考、尝试模型、尝试次数、成功/失败分类、最终模型和选择原因；同一单行日志通过 `model_selection_log` 写入 `latest_brief.md` 与 `data/briefs/YYYY-MM-DD.md` front matter。无 key、LLM 关闭或 SDK 不可用时也记录“未发起请求”和规则模板原因；AI 页面署名仍只显示实际成功模型。
 - 离线验证：fake OpenAI client 覆盖“清单无 Terra 但直呼成功”“Terra 连续两次 429 后切换 5.5”“模型不存在/无权限/503 容量错误后切换”“`models.list` 自身失败不阻断”“两候选均失败回退规则模板”。确认 429 调用顺序为 `Terra → 等待 5 秒 → Terra → 5.5`，等待仅一次，元数据日志保持单行；测试未发起真实 API 请求。
+
+## 2026-07-11 07:30
+
+- 阶段名称 / 本次操作目标：同事件折叠（事件级聚类）
+- 聚类核心：新增 `src/event_clustering.py`，先按发布时间不超过 48 小时和 ticker 交集生成候选对；无 ticker 的 Unmapped 新闻允许比较，但使用更严格阈值。相似度通过独立 `SimilarityIndex` 接口注入，默认 `sentence-transformers/all-MiniLM-L6-v2` 归一化句向量余弦相似度（阈值 `0.72`，Unmapped `0.82`），模型或依赖不可用时自动回退内容词 Jaccard（阈值 `0.40`，Unmapped `0.55`）。向量只对候选对涉及的文章在内存中现算，不持久化。
+- 数据与增量：processed schema 新增 `event_id`、`source_count`。并查集形成事件簇后，以簇内 `agg_weight` 最高文章的 `article_id` 作为全簇 `event_id`，并统计不同 RSS 来源数；单篇簇使用自身 ID。全量管线在文章评分后聚类；增量管线预先复用已有事件成员，只以新增文章驱动二分时间窗查询，比较“新增↔附近已有”和“新增↔新增”。历史数据缺少 `event_id` 时自动执行一次全量迁移。真实数据无新增测试候选对/向量数均为 0，总耗时约 0.007 秒。
+- 依赖分层：按本阶段最新要求恢复 `requirements-full.txt`，固定 `sentence-transformers==5.6.0`，由本地 `setup_env.py` 在保留 GPU torch 后读取；云端 `requirements.txt` 不加入该依赖，构成 FinBERT + lexical 事件聚类路径。本机安装后确认复用 `torch 2.12.1+cu130` 和 RTX 4080 SUPER，embedding 实际运行设备为 CUDA；模拟模型异常可自动回退 lexical。
+- 展示层：Top Drivers 改为每个事件一行，代表文章为最高 `agg_weight` 文章，簇级 `driver_score` 取簇内最大值；`source_count >= 3` 时仅对展示分数乘 `EVENT_COVERAGE_BOOST = 1.15`。多篇簇显示“另有 N 家媒体报道”并可展开全部可点击文章。Article Explorer 新增 `event_id` 列和“按事件分组”开关，分组后增加事件文章数与来源数。每日简报数据包的 Top Drivers 同步使用事件折叠结果。
+- 六维边界：未修改 `dedup_factor`、`agg_weight` 或聚合公式。将聚类前备份与写回后的 2,037 条真实新闻按 `article_id` 对齐，`agg_weight`、`dedup_factor`、11 板块六维表和市场六维 dict 全部逐值一致。独立报道继续各自贡献 Attention/情绪；是否簇内降权仍留到第二冲刺。
+- 真实数据结果：embedding 全量运行得到 1,716 个事件簇，其中多篇簇 172 个（占全部簇 10.02%），493 篇新闻进入多篇簇（文章覆盖率 24.20%），最大簇 25 篇。Apple/Broadcom 合作的 20 条标题明确归入同一主簇 `rss-9d53d9cf9bbfd98a`，该簇共 25 篇、覆盖 Yahoo Finance RSS 与 CNBC 两个来源。Demo 132 篇均为单篇簇。
+- 引擎对比：同批 2,037 条数据用 lexical dry-run 得到 1,996 个簇、多篇簇 29 个、70 篇进入多篇簇（覆盖率 3.44%），比 embedding 多 280 个簇，说明 lexical 明显更保守。清晰的 embedding-only 合并包括 Apple/Broadcom 芯片合作、Microsoft 裁员 4,800 人并重组 Xbox、Tesla Robotaxi 扩展至 Miami；这些标题词面差异较大，lexical 未合并。
+- 人工抽查：使用固定随机种子 5720 抽取 5 个 embedding 多篇簇。SK Hynix 美国上市/与 Micron 差距、Citigroup Q2 财报预览、7-Eleven 起诉 Nike 三簇语义一致；McDonald’s 当日上涨/长期机会/Russell 指数调整，以及 Wix 小盘软件推荐/估值回报两簇属于疑似不同事件误合并。按需求保留 `0.72` 配置值并在 README 标注 TODO，没有为美化结果暗调阈值。
+- 验证：事件/增量/覆盖加成合成数据契约测试通过；`compileall` 通过；Streamlit AppTest 验证 Market Overview 无异常且生成多篇事件展开器，Article Explorer 分组态无异常并包含 `event_id`、`event_article_count`、`source_count`。本阶段尚未提交，等待验收确认。

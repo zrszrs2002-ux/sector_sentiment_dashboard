@@ -91,7 +91,9 @@ METRIC_LABELS = {
 
 EXPECTED_ARTICLE_COLUMNS = [
     "article_id",
+    "event_id",
     "source",
+    "source_count",
     "title",
     "summary",
     "content",
@@ -151,6 +153,21 @@ SENTIMENT_DEVICE = "auto"
 FINBERT_MODEL_NAME = "ProsusAI/finbert"
 FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 FINBERT_MAX_LENGTH = 128
+
+# 事件聚类只折叠展示，不修改 dedup_factor、agg_weight 或六维指标聚合。
+# 独立报道继续贡献 Attention/情绪；是否对簇内文章降权留到第二冲刺用标注数据评估。
+EVENT_TIME_WINDOW_HOURS = 48
+EVENT_SIMILARITY_ENGINE = "embedding"
+EVENT_EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# TODO: 以下事件相似度阈值是首版先验值，待第二冲刺用人工标注事件对校准。
+EVENT_EMBED_THRESHOLD = 0.72
+EVENT_LEXICAL_THRESHOLD = 0.40
+# 无 ticker 的 Unmapped 新闻缺少实体约束，因此采用更严格的文本阈值。
+EVENT_UNMAPPED_EMBED_THRESHOLD = 0.82
+EVENT_UNMAPPED_LEXICAL_THRESHOLD = 0.55
+# TODO: 媒体覆盖加成同样需要用 Top Drivers 标注数据校准，当前取保守的 15%。
+EVENT_COVERAGE_BOOST = 1.15
+EVENT_EMBED_BATCH_SIZE = 64
 
 LLM_ENABLED = True
 # The runtime attempts candidates in order; models.list is logging context only.

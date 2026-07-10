@@ -7,7 +7,7 @@ from src.aggregation import market_metrics, sector_metrics
 from src.brief_generator import read_latest_brief
 from src.config import DISCLAIMER, METRIC_COLUMNS, METRIC_LABELS, WORKING_SET_DAYS
 from src.driver_analysis import top_driver_articles
-from src.ui_helpers import load_selected_articles, url_column_config
+from src.ui_helpers import load_selected_articles
 
 
 def render_radar(scores: dict[str, float], title: str) -> None:
@@ -36,6 +36,44 @@ def fmt_time(value: object) -> str:
     if value is None or pd.isna(value):
         return "暂无"
     return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def markdown_article_link(title: object, url: object) -> str:
+    label = str(title or "无标题").replace("[", "\\[").replace("]", "\\]")
+    href = str(url or "").strip()
+    return f"[{label}]({href})" if href.startswith(("http://", "https://")) else label
+
+
+def render_driver_events(drivers: pd.DataFrame) -> None:
+    if drivers.empty:
+        st.info("当前窗口暂无可展示的驱动事件。")
+        return
+
+    for rank, row in enumerate(drivers.to_dict("records"), start=1):
+        st.markdown(f"**{rank}. {markdown_article_link(row.get('title'), row.get('url'))}**")
+        source_count = int(float(row.get("source_count", 0) or 0))
+        article_count = int(float(row.get("event_article_count", 1) or 1))
+        boost_label = " · 已应用媒体覆盖加成" if bool(row.get("coverage_boost_applied")) else ""
+        st.caption(
+            f"{row.get('sector', 'Unmapped')} · {row.get('topic', '')} · "
+            f"事件分数 {float(row.get('driver_score', 0) or 0):.1f} · {source_count} 家媒体{boost_label}"
+        )
+        st.write(str(row.get("driver_reason", "")))
+
+        if article_count > 1:
+            other_media_count = max(0, source_count - 1)
+            media_label = (
+                f"另有 {other_media_count} 家媒体报道"
+                if other_media_count
+                else f"另有 {article_count - 1} 篇同源报道"
+            )
+            with st.expander(f"{media_label} · 查看簇内全部 {article_count} 篇"):
+                for article in row.get("event_articles", []):
+                    st.markdown(
+                        f"- {markdown_article_link(article.get('title'), article.get('url'))}  "
+                        f"  {article.get('source', '')} · {fmt_time(article.get('published_at'))}"
+                    )
+        st.divider()
 
 
 df, source_mode = load_selected_articles()
@@ -97,16 +135,4 @@ fig.update_layout(height=430)
 st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Top Market Drivers")
-driver_columns = [
-    "title",
-    "sector",
-    "topic",
-    "risk_category",
-    "driver_score",
-    "risk_intensity",
-    "driver_reason",
-    "evidence_sentence",
-    "url",
-]
-drivers = top_driver_articles(df, limit=5).reindex(columns=driver_columns)
-st.dataframe(drivers, use_container_width=True, hide_index=True, column_config=url_column_config())
+render_driver_events(top_driver_articles(df, limit=5))

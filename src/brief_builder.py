@@ -162,6 +162,8 @@ def _drivers(df: pd.DataFrame) -> list[dict[str, Any]]:
                 "driver_reason": str(row.get("driver_reason", "")),
                 "evidence_sentence": str(row.get("evidence_sentence", "")),
                 "url": str(row.get("url", "")),
+                "source_count": int(row.get("source_count", 0) or 0),
+                "related_article_count": int(row.get("event_article_count", 1) or 1),
             }
         )
     return rows

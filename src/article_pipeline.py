@@ -19,6 +19,7 @@ from src.config import (
 )
 from src.daily_snapshots import write_daily_snapshots
 from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL
+from src.event_clustering import cluster_articles, cluster_articles_incremental
 from src.mapping import map_article
 from src.preprocessing import preprocess_records, read_article_csv, write_article_csv
 from src.scoring import score_article
@@ -194,6 +195,8 @@ def error_record(record: dict[str, str], error: Exception) -> dict[str, str]:
     fallback = {column: record.get(column, "") for column in EXPECTED_ARTICLE_COLUMNS}
     fallback.update(
         {
+            "event_id": record.get("article_id", ""),
+            "source_count": "1" if record.get("source") else "0",
             "sector": record.get("sector", "") or "Unmapped",
             "topic": record.get("topic", "") or "processing error",
             "sentiment_score": "0.000",
@@ -285,6 +288,8 @@ def process_articles(input_path=None, output_path=None) -> list[dict[str, str]]:
             enriched_records.append(fallback)
             error_records.append(fallback)
 
+    cluster_result = cluster_articles(enriched_records)
+    enriched_records = cluster_result.records
     write_article_csv(output_path, enriched_records)
     write_article_csv(ERROR_RECORDS_PATH, error_records)
     write_daily_snapshots(enriched_records, data_source_for_output_path(output_path))
@@ -309,16 +314,8 @@ def process_articles_incremental(input_path, output_path, new_raw_records=None) 
     ]
     enriched_new_records, _error_records = enrich_records_batch(candidate_records)
 
-    merged_by_id: dict[str, dict[str, str]] = {}
-    ordered_ids: list[str] = []
-    for record in existing_records + enriched_new_records:
-        article_id = str(record.get("article_id", "")).strip()
-        if not article_id:
-            article_id = f"missing-{len(ordered_ids)}"
-        if article_id not in merged_by_id:
-            ordered_ids.append(article_id)
-        merged_by_id[article_id] = record
-    merged_records = [merged_by_id[article_id] for article_id in ordered_ids]
+    cluster_result = cluster_articles_incremental(existing_records, enriched_new_records)
+    merged_records = cluster_result.records
 
     write_pipeline_outputs(output_path, merged_records, data_source_for_output_path(output_path))
     new_count = len(enriched_new_records)

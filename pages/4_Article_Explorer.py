@@ -1,10 +1,12 @@
 import pandas as pd
 import streamlit as st
 
+from src.driver_analysis import collapse_articles_by_event
 from src.ui_helpers import load_selected_articles, url_column_config
 
 
 load_all_history = st.checkbox("加载全部历史", value=False, help="默认仅加载近 30 天工作集；勾选后读取全部累计历史。")
+group_by_event = st.checkbox("按事件分组", value=False, help="每个 event_id 只显示 agg_weight 最高的代表文章。")
 df, source_mode = load_selected_articles(load_all_history=load_all_history)
 
 st.title("文章浏览器")
@@ -51,11 +53,13 @@ sort_mode = st.radio(
     horizontal=True,
 )
 
-filtered = time_filtered[
+filtered_articles = time_filtered[
     time_filtered["source"].isin(selected_sources)
     & time_filtered["sector"].isin(selected_sectors)
     & time_filtered["risk_category"].isin(selected_risks)
 ].copy()
+
+filtered = collapse_articles_by_event(filtered_articles) if group_by_event else filtered_articles
 
 if sort_mode == "sentiment_score 从高到低":
     filtered = filtered.sort_values("sentiment_score", ascending=False)
@@ -66,7 +70,9 @@ else:
 
 display_columns = [
     "title",
+    "event_id",
     "source",
+    "source_count",
     "published_at",
     "sector",
     "topic",
@@ -81,8 +87,13 @@ display_columns = [
     "evidence_sentence",
     "url",
 ]
+if group_by_event:
+    display_columns.insert(2, "event_article_count")
 
-st.metric("筛选后新闻数量", len(filtered))
+metric_label = "筛选后事件数量" if group_by_event else "筛选后新闻数量"
+st.metric(metric_label, len(filtered))
+if group_by_event:
+    st.caption(f"这些事件共包含 {len(filtered_articles)} 篇独立新闻；分组仅影响展示。")
 st.dataframe(
     filtered[display_columns],
     use_container_width=True,
