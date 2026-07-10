@@ -1,25 +1,48 @@
+import hmac
+import os
 from pathlib import Path
 
 import streamlit as st
 
-from src.config import DISCLAIMER
-from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL, has_real_articles
-from src.brief_generator import generate_daily_brief
-from src.news_collector import collect_rss_news
-from src.sentiment_model import sentiment_backend_status
-
-
-BASE_DIR = Path(__file__).resolve().parent
 
 st.set_page_config(
     page_title="自动化板块级金融舆情雷达系统",
     layout="wide",
 )
 
+
+def bridge_streamlit_secrets() -> None:
+    try:
+        for key, value in st.secrets.items():
+            os.environ.setdefault(str(key), str(value))
+    except FileNotFoundError:
+        return
+    except Exception as exc:  # Streamlit uses its own missing-secrets exception.
+        if exc.__class__.__name__ == "StreamlitSecretNotFoundError":
+            return
+        raise
+
+
+bridge_streamlit_secrets()
+
+from src.config import DEMO_PIN, DISCLAIMER, FINBERT_LOCAL_FILES_ONLY
+from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL, has_real_articles
+from src.brief_generator import generate_daily_brief
+from src.news_collector import collect_rss_news
+from src.sentiment_model import load_finbert_resources, sentiment_backend_status
+
+
+BASE_DIR = Path(__file__).resolve().parent
+
 st.sidebar.title("板块级金融舆情雷达")
 st.sidebar.caption("公开财经新闻舆情监测工具")
 st.sidebar.info(DISCLAIMER)
-st.sidebar.caption(sentiment_backend_status())
+if not FINBERT_LOCAL_FILES_ONLY and load_finbert_resources.cache_info().currsize == 0:
+    with st.spinner("首次启动正在下载 FinBERT 模型（约 440MB），请稍候…"):
+        sentiment_status = sentiment_backend_status()
+else:
+    sentiment_status = sentiment_backend_status()
+st.sidebar.caption(sentiment_status)
 
 real_available = has_real_articles()
 source_options = [REAL_DATA_LABEL, DEMO_DATA_LABEL]
@@ -70,17 +93,24 @@ if st.sidebar.button("立即重新生成简报"):
 
 if st.session_state.get("confirm_force_brief"):
     st.sidebar.warning("确认后会无视每日门闸并调用简报生成流程；若 OPENAI_API_KEY 可用，可能产生 API 费用。")
+    pin_matches = True
+    if DEMO_PIN:
+        entered_pin = st.sidebar.text_input("访问口令", type="password", key="force_brief_pin")
+        pin_matches = hmac.compare_digest(entered_pin, DEMO_PIN)
     if st.sidebar.button("确认生成（可能产生费用）"):
-        with st.spinner("正在重新生成每日市场简报..."):
-            result = generate_daily_brief(
-                source_mode=st.session_state.get("data_source_mode", REAL_DATA_LABEL),
-                force=True,
-            )
-        st.session_state["confirm_force_brief"] = False
-        if result.get("status") == "generated":
-            st.sidebar.success(result.get("message", "简报已生成。"))
+        if DEMO_PIN and not pin_matches:
+            st.sidebar.error("访问口令不正确，未调用简报生成接口。")
         else:
-            st.sidebar.warning(result.get("message", "简报未生成。"))
+            with st.spinner("正在重新生成每日市场简报..."):
+                result = generate_daily_brief(
+                    source_mode=st.session_state.get("data_source_mode", REAL_DATA_LABEL),
+                    force=True,
+                )
+            st.session_state["confirm_force_brief"] = False
+            if result.get("status") == "generated":
+                st.sidebar.success(result.get("message", "简报已生成。"))
+            else:
+                st.sidebar.warning(result.get("message", "简报未生成。"))
     if st.sidebar.button("取消重新生成"):
         st.session_state["confirm_force_brief"] = False
 

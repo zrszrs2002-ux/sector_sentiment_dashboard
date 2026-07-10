@@ -1,4 +1,24 @@
+import os
 from pathlib import Path
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -124,11 +144,12 @@ RISK_UNCERTAINTY_PRESSURE_WEIGHT = 10
 SENTIMENT_ENGINE = "finbert"
 SENTIMENT_DEVICE = "auto"
 FINBERT_MODEL_NAME = "ProsusAI/finbert"
-FINBERT_LOCAL_FILES_ONLY = True
+FINBERT_LOCAL_FILES_ONLY = _env_bool("FINBERT_LOCAL_FILES_ONLY", True)
 FINBERT_MAX_LENGTH = 128
-FINBERT_BATCH_SIZE = 32
+FINBERT_BATCH_SIZE = _env_int("FINBERT_BATCH_SIZE", 32)
 
 LLM_ENABLED = True
+DEMO_PIN = os.getenv("DEMO_PIN", "").strip()
 # The runtime verifies this exact ID through OpenAI's models.list() before
 # generation. Switch back to gpt-5.6-terra after the account receives access.
 LLM_MODEL_BRIEF = "gpt-5.5"

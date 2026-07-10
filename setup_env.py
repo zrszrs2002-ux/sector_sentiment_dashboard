@@ -4,11 +4,25 @@ import importlib
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 TORCH_VERSION = "2.12.1"
 TRANSFORMERS_VERSION = "5.13.0"
 CUDA_INDEX_URL = "https://download.pytorch.org/whl/cu130"
 CPU_INDEX_URL = "https://download.pytorch.org/whl/cpu"
+
+
+def local_requirements() -> list[str]:
+    """Read shared app dependencies while excluding cloud-only ML packages."""
+    path = Path(__file__).with_name("requirements.txt")
+    excluded_prefixes = ("--extra-index-url", "torch==", "transformers==")
+    return [
+        line
+        for raw_line in path.read_text(encoding="utf-8-sig").splitlines()
+        if (line := raw_line.strip())
+        and not line.startswith("#")
+        and not line.startswith(excluded_prefixes)
+    ]
 
 def run(command: list[str]) -> None:
     print("执行：", " ".join(command))
@@ -52,7 +66,7 @@ def self_check() -> None:
 def main() -> None:
     try:
         install_torch(has_nvidia_gpu())
-        run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        run([sys.executable, "-m", "pip", "install", *local_requirements()])
         run([sys.executable, "-m", "pip", "install", f"transformers=={TRANSFORMERS_VERSION}"])
         self_check()
     except subprocess.CalledProcessError as exc:

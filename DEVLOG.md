@@ -157,3 +157,12 @@
 
 - 阶段名称 / 本次操作目标：OpenAI 简报模型 ID 修正
 - 具体做了什么：根据账户实测的 `models.list()` 结果，将 `LLM_MODEL_BRIEF` 改为当前可用的 `gpt-5.5`，并让兼容配置 `LLM_MODEL` 同步指向该值。保留现有模型清单校验、Responses API、门闸和规则模板降级逻辑不变；模型不可用时的提示改为根据当前配置动态显示对应模型家族。账户获得权限后可将 `LLM_MODEL_BRIEF` 切回 `gpt-5.6-terra`。
+
+## 2026-07-11 02:21
+
+- 阶段名称 / 本次操作目标：Streamlit Community Cloud CPU FinBERT 完整部署改造
+- 依赖与本地保护：将 `requirements.txt` 改为云端完整清单，加入 PyTorch CPU index、`torch==2.12.1+cpu` 和 `transformers==5.13.0`，保留现有应用依赖；删除废弃的 `requirements-full.txt`。由于新的完整清单会覆盖本地 GPU torch，`setup_env.py` 改为读取该清单后过滤 CPU torch、transformers 和云端 index，再安装其余依赖并按本机 GPU/CPU 情况单独安装 ML 依赖。
+- 配置与启动：`FINBERT_LOCAL_FILES_ONLY` 和 `FINBERT_BATCH_SIZE` 改为环境变量配置，本地默认仍为 `1` 和 `32`，云端可设为 `0` 和 `8`；`SENTIMENT_DEVICE` 保持 `auto`。新增 `DEMO_PIN` 环境变量。`app.py` 在导入 `src.config` 前将 Streamlit Secrets 逐项桥接到环境变量，本地没有 Secrets 文件时静默跳过；启动顺序保持 `st.set_page_config()` 最先执行。
+- 页面保护与模型体验：云端允许下载且 FinBERT 尚未加载时，用“首次启动正在下载 FinBERT 模型（约 440MB），请稍候…” spinner 包裹首次加载；现有模型加载异常捕获继续回退词典模型。`DEMO_PIN` 非空时，侧边栏强制重新生成简报需要输入正确口令，错误口令不会进入 `generate_daily_brief()`；为空时保持本地原行为。
+- 文档与云端限制：README 改为 Community Cloud 使用根目录 `requirements.txt`，列出 `OPENAI_API_KEY`、`FINBERT_LOCAL_FILES_ONLY="0"`、`FINBERT_BATCH_SIZE="8"`、`DEMO_PIN` 四项 Secrets，说明首次模型下载耗时、CPU 推理较慢、加载失败降级，以及容器文件系统和模型缓存易失；公开演示基准数据以仓库提交为准。
+- 验证结果：`compileall` 通过；依赖逐行结构和 `setup_env.py` 过滤器检查通过；云端环境值与本地默认值检查通过；AST 检查确认 Secrets 桥接发生在配置导入前，错误 PIN 分支不会调用简报生成；本地无 Secrets 文件的异常类型可被静默处理。运行时代码 `src/`、`pages/`、`app.py` 的 Windows 盘符、`python.exe`、PowerShell、`cmd.exe`、`nvidia-smi`、`.ps1` 扫描命中数为 0，云端 Linux 运行路径不依赖 Windows 专属路径或命令。本轮未安装云端 CPU requirements，避免覆盖已验证的本地 GPU torch。

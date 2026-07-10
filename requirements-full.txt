@@ -1,6 +1,0 @@
-# 此文件供 Streamlit Community Cloud 等无 GPU 云端部署使用；
-# 本地安装请运行 python setup_env.py，会自动选择 CPU/GPU 版本。
--r requirements.txt
-transformers==5.13.0
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.12.1+cpu

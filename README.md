@@ -61,14 +61,17 @@ python setup_env.py
 streamlit run app.py
 ```
 
-`setup_env.py` 会自动探测 NVIDIA GPU：有 GPU 时安装 CUDA 版 torch，无 GPU 或探测失败时安装 CPU 版 torch；如果已检测到本地 GPU 版 torch，会跳过 torch 安装，避免覆盖。脚本还会安装 `requirements.txt`、`transformers`，并在最后打印 torch 版本、CUDA 状态和中文结论。
+`setup_env.py` 会自动探测 NVIDIA GPU：有 GPU 时安装 CUDA 版 torch，无 GPU 或探测失败时安装 CPU 版 torch；如果已检测到本地 GPU 版 torch，会跳过 torch 安装，避免覆盖。脚本会从云端完整清单中读取并安装其余应用依赖，但主动排除其中的 CPU torch 和 transformers，再单独安装适合本地环境的版本，最后打印 torch 版本、CUDA 状态和中文结论。
+
+本地环境禁止执行 `pip install -r requirements.txt`，因为该文件固定包含云端 CPU 版 torch，可能覆盖已经可用的本地 GPU 版本。
 
 默认配置只读取本地缓存中的 `ProsusAI/finbert`，不会在 dashboard 运行时强制联网下载；模型不可用时自动回退词典模型。
 
 FinBERT 相关配置集中在 `src/config.py`：
 
 - `SENTIMENT_DEVICE = "auto"`：可选 `auto/cuda/cpu`；`auto` 会在 `torch.cuda.is_available()` 为 True 时使用 CUDA。
-- `FINBERT_BATCH_SIZE = 32`：跨文章收集句子后批量推理。
+- `FINBERT_LOCAL_FILES_ONLY`：从环境变量读取，默认 `1`，本地只读已有模型缓存；云端设为 `0` 后允许首次启动下载模型。
+- `FINBERT_BATCH_SIZE`：从环境变量读取，默认 `32`；云端建议设为 `8` 以降低 CPU 内存峰值。
 - 标签映射使用 `model.config.id2label` 动态解析，并在启动时做映射测试，避免把 `negative` 和 `neutral` 的概率静默互换。
 
 命令行抓取真实 RSS 新闻：
@@ -81,7 +84,22 @@ python -m src.news_collector
 
 ## 7. 云端部署
 
-Streamlit Community Cloud 等无 GPU 云端部署使用 `requirements-full.txt`。该文件固定安装 CPU 版 torch，便于部署环境稳定复现；本地安装不要直接运行它，请使用 `python setup_env.py` 自动选择 CPU/GPU 版本。
+Streamlit Community Cloud 直接使用项目根目录的 `requirements.txt`。该文件已包含 CPU 版 torch、transformers 和全部应用依赖；旧的 `requirements-full.txt` 已废弃并删除。本地安装仍一律使用 `python setup_env.py`。
+
+在 Streamlit Community Cloud 的 Secrets 中配置：
+
+```toml
+OPENAI_API_KEY = "your_replacement_api_key"
+FINBERT_LOCAL_FILES_ONLY = "0"
+FINBERT_BATCH_SIZE = "8"
+DEMO_PIN = "your_private_demo_pin"
+```
+
+`DEMO_PIN` 用于保护侧边栏“立即重新生成简报”操作，避免公开演示页面被反复调用而产生 API 费用。不要将真实 key 或口令提交到仓库。
+
+云端首次启动需要下载约 440MB 的 `ProsusAI/finbert` 模型，页面会显示等待提示；下载时间受网络和实例性能影响，CPU 推理也会比本地 GPU 慢。模型下载或加载失败时系统会继续使用词典模型，不会中断页面。
+
+Community Cloud 容器文件系统具有易失性：运行期间抓取的新 RSS、快照、历史简报和模型缓存可能在休眠、重启或重新部署后消失。公开演示的基准数据以仓库中已提交的 `data/` 文件为准；需要永久积累真实新闻时，应另接持久化存储。
 
 ## 8. 当前限制
 
