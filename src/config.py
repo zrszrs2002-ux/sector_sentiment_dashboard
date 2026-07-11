@@ -33,6 +33,10 @@ DEMO_PROCESSED_ARTICLES_PATH = DATA_DIR / "processed_articles.csv"
 RAW_ARTICLES_PATH = DATA_DIR / "raw_articles.csv"
 REAL_PROCESSED_ARTICLES_PATH = DATA_DIR / "real_processed_articles.csv"
 ERROR_RECORDS_PATH = DATA_DIR / "error_records.csv"
+ANNOTATION_DIR = DATA_DIR / "annotation"
+ANNOTATION_BLIND_PATH = ANNOTATION_DIR / "annotation_blind.csv"
+ANNOTATION_KEY_PATH = ANNOTATION_DIR / "annotation_key.csv"
+ANNOTATION_ERRORS_PATH = ANNOTATION_DIR / "sentiment_errors.csv"
 SECTOR_DAILY_SCORES_PATH = DATA_DIR / "sector_daily_scores.csv"
 MARKET_DAILY_SCORES_PATH = DATA_DIR / "market_daily_scores.csv"
 LATEST_BRIEF_PATH = DATA_DIR / "latest_brief.md"
@@ -41,6 +45,9 @@ CSV_EXPORT_ENCODING = "utf-8-sig"
 BACKUP_RETENTION_COUNT = 10
 WORKING_SET_DAYS = 30
 RAW_SQLITE_WARNING_MB = 50
+ANNOTATION_SAMPLE_SIZE = 300
+ANNOTATION_RANDOM_SEED = 5720
+CALIBRATION_BIN_COUNT = 10
 
 DISCLAIMER = "本系统基于公开财经新闻自动分析市场舆情，结果仅供研究参考，不构成投资建议。投资有风险，决策需独立判断。"
 

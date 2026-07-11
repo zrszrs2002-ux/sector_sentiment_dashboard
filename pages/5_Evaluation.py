@@ -1,11 +1,18 @@
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-from src.config import CSV_EXPORT_ENCODING
+from src.config import (
+    ANNOTATION_BLIND_PATH,
+    ANNOTATION_ERRORS_PATH,
+    ANNOTATION_KEY_PATH,
+    CSV_EXPORT_ENCODING,
+)
 from src.evaluation import (
-    annotation_template,
+    SENTIMENT_LABELS,
     coverage_summary_table,
-    evaluate_annotations,
+    evaluate_model_annotations,
     formula_article_examples,
     formula_metric_comparison,
     formula_rank_changes,
@@ -15,57 +22,255 @@ from src.evaluation import (
 from src.ui_helpers import load_selected_articles
 
 
+def read_csv_file(source) -> pd.DataFrame:
+    return pd.read_csv(source, encoding="utf-8-sig")
+
+
+def render_confusion_matrix(matrix: pd.DataFrame, title: str) -> None:
+    figure = px.imshow(
+        matrix,
+        text_auto="d",
+        color_continuous_scale="Blues",
+        labels={"x": "预测标签", "y": "真实标签", "color": "样本数"},
+        title=title,
+        aspect="auto",
+    )
+    figure.update_layout(height=390)
+    st.plotly_chart(figure, use_container_width=True)
+
+
+def render_reliability_curve(reliability: pd.DataFrame) -> None:
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode="lines",
+            name="理想校准",
+            line={"dash": "dash", "color": "#777"},
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=reliability["mean_confidence"],
+            y=reliability["accuracy"],
+            mode="lines+markers",
+            name="FinBERT",
+            text=[f"样本数 {count}" for count in reliability["count"]],
+            hovertemplate="平均置信度 %{x:.3f}<br>准确率 %{y:.3f}<br>%{text}<extra></extra>",
+        )
+    )
+    figure.update_layout(
+        title="FinBERT 可靠性曲线",
+        xaxis_title="分桶平均置信度",
+        yaxis_title="分桶准确率",
+        xaxis={"range": [0, 1]},
+        yaxis={"range": [0, 1]},
+        height=390,
+    )
+    st.plotly_chart(figure, use_container_width=True)
+
+
 df, source_mode = load_selected_articles()
 
 st.title("评估")
-st.caption(
-    "提供覆盖统计、输出分布、Baseline vs Enhanced 对比和人工标注 CSV 接口；"
-    "正式消融与敏感性分析留到第二冲刺。"
+st.info(
+    "本页评估文章分类层：情绪、板块映射、风险标签、证据句与 FinBERT 校准。"
+    "六维指标层的稳健性验证（敏感性分析与消融实验）另行实现。"
 )
 st.caption(f"当前数据源：{source_mode}")
+st.caption("上方分类评估固定读取 annotation 文件；当前数据源只影响页面底部的数据诊断区块。")
 
-st.subheader("覆盖统计")
-st.dataframe(coverage_summary_table(df), use_container_width=True, hide_index=True)
-
-st.subheader("输出分布")
-distribution = output_distribution(df)
-st.dataframe(distribution.round(4), use_container_width=True, hide_index=True)
-
-st.subheader("Baseline vs Enhanced 对比")
-baseline_sector, enhanced_sector = formula_sector_outputs(df, source_mode)
-
-st.markdown("**六维板块分布**")
-metric_comparison = formula_metric_comparison(baseline_sector, enhanced_sector)
-st.dataframe(metric_comparison.round(2), use_container_width=True, hide_index=True)
-
-st.markdown("**各维度排名变化最大的板块**")
-rank_changes = formula_rank_changes(
-    df,
-    baseline_sector,
-    enhanced_sector,
-    source_mode,
-)
-st.dataframe(rank_changes.round(2), use_container_width=True, hide_index=True)
-
-st.markdown("**具体新闻两套分数对照**")
-article_examples = formula_article_examples(df, limit=3)
-st.dataframe(article_examples.round(2), use_container_width=True, hide_index=True)
-
-st.subheader("人工标注 CSV 接口")
-template = annotation_template(df)
-st.download_button(
-    "下载标注模板 CSV",
-    data=template.to_csv(index=False).encode(CSV_EXPORT_ENCODING),
-    file_name="annotation_template.csv",
-    mime="text/csv",
+st.subheader("人工标注评估")
+st.caption(
+    "先运行 `python scripts/sample_for_annotation.py` 生成 300 条盲标样本。"
+    "标注者只使用 annotation_blind.csv；annotation_key.csv 仅由本页后台对账。"
 )
 
 uploaded_file = st.file_uploader(
-    "上传已标注 CSV",
+    "上传已填写的 annotation_blind.csv（留空则读取 data/annotation/annotation_blind.csv）",
     type=["csv"],
-    help="至少包含 article_id；可选标注列：label_sentiment、label_sector、label_risk_category。",
 )
+
+annotations = pd.DataFrame()
+annotation_key = pd.DataFrame()
 if uploaded_file is not None:
-    annotations = pd.read_csv(uploaded_file)
-    metrics = evaluate_annotations(df, annotations)
-    st.dataframe(metrics, use_container_width=True, hide_index=True)
+    try:
+        annotations = read_csv_file(uploaded_file)
+    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
+        st.error(f"标注 CSV 读取失败：{exc}")
+elif ANNOTATION_BLIND_PATH.exists():
+    try:
+        annotations = read_csv_file(ANNOTATION_BLIND_PATH)
+    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
+        st.error(f"默认盲标文件读取失败：{exc}")
+
+if ANNOTATION_KEY_PATH.exists():
+    try:
+        annotation_key = read_csv_file(ANNOTATION_KEY_PATH)
+    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
+        st.error(f"annotation_key 读取失败：{exc}")
+
+if annotations.empty or annotation_key.empty:
+    st.info("尚无可评估的盲标文件与对账 key，请先运行分层抽样脚本。")
+else:
+    label_columns = [
+        "label_sentiment",
+        "label_sector_ok",
+        "label_risk_categories",
+        "label_evidence_ok",
+    ]
+    completed_cells = sum(
+        int(annotations.get(column, pd.Series(dtype=str)).fillna("").astype(str).str.strip().ne("").sum())
+        for column in label_columns
+    )
+    st.caption(
+        f"已载入 {len(annotations)} 条盲标样本；四类标签共填写 {completed_cells} 个单元格。"
+    )
+    try:
+        result = evaluate_model_annotations(
+            annotations,
+            annotation_key,
+            error_output_path=ANNOTATION_ERRORS_PATH,
+        )
+    except ValueError as exc:
+        st.error(f"标注数据校验失败：{exc}")
+    else:
+        if result["sentiment_labelled_count"] == 0:
+            st.info("当前尚未填写有效情绪标签；填写后将显示三方对比、混淆矩阵与校准结果。")
+        else:
+            metric_a, metric_b, metric_c, metric_d = st.columns(4)
+            finbert_report = result["sentiment_reports"]["FinBERT"]
+            metric_a.metric("情绪标注数", result["sentiment_labelled_count"])
+            metric_b.metric("FinBERT Accuracy", f"{finbert_report['accuracy']:.3f}")
+            metric_c.metric("FinBERT Macro F1", f"{finbert_report['macro_f1']:.3f}")
+            metric_d.metric("Brier Score", f"{result['calibration']['brier_score']:.3f}")
+
+            st.markdown("**全中性基线 / 词典引擎 / FinBERT**")
+            st.dataframe(
+                result["sentiment_comparison"].round(4),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            engine = st.selectbox(
+                "混淆矩阵与分类指标引擎",
+                options=list(result["sentiment_reports"]),
+                index=2,
+            )
+            selected_report = result["sentiment_reports"][engine]
+            left, right = st.columns([0.9, 1.1])
+            with left:
+                st.dataframe(
+                    selected_report["per_class"].round(4),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            with right:
+                render_confusion_matrix(
+                    selected_report["confusion_matrix"],
+                    f"{engine} 3×3 混淆矩阵",
+                )
+
+            reliability = result["calibration"]["reliability"]
+            if not reliability.empty:
+                render_reliability_curve(reliability)
+                st.dataframe(
+                    reliability.round(4),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        st.markdown("**板块、风险与证据句**")
+        sector_metric, evidence_metric = st.columns(2)
+        sector_value = (
+            f"{result['sector_mapping']['accuracy']:.3f}"
+            if result["sector_mapping"]["sample_count"]
+            else "暂无"
+        )
+        evidence_value = (
+            f"{result['evidence']['precision']:.3f}"
+            if result["evidence"]["sample_count"]
+            else "暂无"
+        )
+        sector_metric.metric(
+            "板块映射 Accuracy",
+            sector_value,
+            help=f"有效标注 {result['sector_mapping']['sample_count']} 条",
+        )
+        evidence_metric.metric(
+            "证据句 Precision",
+            evidence_value,
+            help=f"有效标注 {result['evidence']['sample_count']} 条",
+        )
+        if not result["risk"]["per_class"].empty:
+            st.caption(
+                f"风险多标签 Macro F1：{result['risk']['macro_f1']:.3f}；"
+                f"有效标注 {result['risk']['sample_count']} 条。"
+            )
+            st.dataframe(
+                result["risk"]["per_class"].round(4),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        errors = result["sentiment_errors"]
+        st.markdown("**情绪误判样本**")
+        if errors.empty:
+            st.info("当前没有 FinBERT 情绪误判样本，或尚无有效情绪标注。")
+        else:
+            filter_col1, filter_col2 = st.columns(2)
+            true_filter = filter_col1.multiselect(
+                "真实标签",
+                SENTIMENT_LABELS,
+                default=SENTIMENT_LABELS,
+            )
+            predicted_filter = filter_col2.multiselect(
+                "预测标签",
+                SENTIMENT_LABELS,
+                default=SENTIMENT_LABELS,
+            )
+            filtered_errors = errors[
+                errors["true_sentiment"].isin(true_filter)
+                & errors["predicted_sentiment"].isin(predicted_filter)
+            ]
+            st.dataframe(
+                filtered_errors.round(4),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.download_button(
+                "下载筛选后的误判 CSV",
+                data=filtered_errors.to_csv(index=False).encode(CSV_EXPORT_ENCODING),
+                file_name="sentiment_errors_filtered.csv",
+                mime="text/csv",
+            )
+            st.caption(f"完整错误清单已写入 {ANNOTATION_ERRORS_PATH}")
+
+st.divider()
+with st.expander("现有数据诊断与六维公式描述性对照（非稳健性验证）"):
+    st.markdown("**覆盖统计**")
+    st.dataframe(coverage_summary_table(df), use_container_width=True, hide_index=True)
+
+    st.markdown("**输出分布**")
+    st.dataframe(output_distribution(df).round(4), use_container_width=True, hide_index=True)
+
+    baseline_sector, enhanced_sector = formula_sector_outputs(df, source_mode)
+    st.markdown("**Baseline vs Enhanced 六维板块分布**")
+    st.dataframe(
+        formula_metric_comparison(baseline_sector, enhanced_sector).round(2),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.markdown("**排名变化最大的板块**")
+    st.dataframe(
+        formula_rank_changes(df, baseline_sector, enhanced_sector, source_mode).round(2),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.markdown("**具体新闻两套分数对照**")
+    st.dataframe(
+        formula_article_examples(df, limit=3).round(2),
+        use_container_width=True,
+        hide_index=True,
+    )

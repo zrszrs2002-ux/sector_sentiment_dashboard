@@ -228,3 +228,26 @@
 - 方向性抽查：成长样例 `Shopify reinstated...Buy rating...growth outlook` 命中 `growth/expansion/buy rating`，Optimism `55.10→68.57`；`3M...Growth Trends Improving...` 命中 `growth/upside/buy rating`，`35.50→49.85`。冲击样例 `Cramer Just Turned Bearish...` 命中 `crash/bearish`，Fear `43.70→60.59`；`3 AI Chip Stocks to Buy as the Sell-Off Continues` 命中 `sell-off`，`2.10→11.47`。四条净变化方向均符合设计。
 - 验证：新增 5 个标准库回归测试，覆盖文章公式、句级归一化、LM 合并、Disagreement、Risk 不变、旧 Attention 历史兼容和快照双写，全部通过。`compileall`、`git diff --check`、全部词典 JSON 解析通过；真实数据契约确认六个组件均在 0-1、两套板块六维均在 0-100、当天真实快照为 22 个板块行和 2 个市场行。随机 200 条由 CSV 重算 ACTIVE 文章分数最大差异 0.08，仅来自持久化小数位舍入。Streamlit AppTest 验证 Market Overview、Sector Comparison、Sector Detail、Evaluation 无异常，简报/趋势读取到的均为 enhanced 快照。
 - 当前项目状态：本阶段实现与验证完成，尚未提交，等待用户验收确认后按流程执行 `git add -A` 并以本阶段名称提交。
+
+## 2026-07-11 18:05
+
+- 阶段名称 / 本次操作目标：六维指标增强版计算二次完整性审计与补交
+- 审计原因：上一轮完成后 Git 提交曾被 Codex 审批额度限制阻断，用户要求先确认该阶段没有因额度耗尽而中断，再继续第二冲刺。
+- 重新核对：直接审计 Git 索引中的独立阶段快照，确认 growth/shock/stance 与 302 项不确定性词典、两套完整权重组、六个持久化组件、增强版 Optimism/Fear/Uncertainty、PolarityMix Disagreement、30 天 Attention ECDF 切换、快照双写、ACTIVE 版本过滤、Evaluation 对照和 README 公式均已进入暂存快照。
+- 重新运行：增强指标专属 5 个测试全部通过；真实 processed 共 2,088 条、处理错误 0，六个组件全在 0-1。随机 200 条由 CSV 纯算术复算 ACTIVE 文章分数的最大差异为 0.08，仅来自持久化舍入；baseline/enhanced 两套板块和市场六维均在 0-100。最新真实快照确认有 22 个板块行、2 个市场行，并同时包含 baseline/enhanced，`attention_volume` 无空值。
+- 提交结果：确认阶段完整后提交为 `5e63439`，提交信息为“六维指标增强版计算（PDF 第 6/9.2 节部分 enhanced）”。本次二次审计未发现遗漏或半完成实现。
+
+## 2026-07-11 18:20
+
+- 阶段名称 / 本次操作目标：模型评估工具链（第二冲刺第一批）
+- 分层盲标：新增 `scripts/sample_for_annotation.py`，从 `raw_articles.csv` 与 `real_processed_articles.csv` 按 `article_id` 一一对齐，以预测 sector × FinBERT 三分类做确定性轮询均衡抽样；容量不足的小层取尽后自动把余量分配给其他层。默认样本数 300、随机种子 5720，参数与路径集中在 config，并提供 CLI 覆盖。
+- 正式样本：从 2,088 条候选中生成 `data/annotation/annotation_blind.csv` 和 `annotation_key.csv` 各 300 条，raw 未匹配数为 0。36 个交叉层全部覆盖，每层 3-9 条；Utilities-negative 原始容量只有 3 条，因此该层全部入样。blind 精确只有 11 个规定字段，标签列全空、ID 唯一，不含 sector、风险、证据句、情绪概率、置信度或任何 `predicted_*` 字段；key 与 blind 的 article_id 集合完全一致。
+- 标注规范：新增 `docs/annotation_guide.md`，说明三类情绪、正负混合/纯事实/股价波动边界、10 类风险、证据句标准与格式。为解决 blind 文件不展示预测却要求 `sector_ok/evidence_ok` 的契约矛盾，采用两遍流程：主标注者第一遍只做情绪和风险并锁定；评估负责人第二遍保管私有 key，只完成板块和证据句对账，不修改第一遍标签。
+- 指标引擎：扩展 `src/evaluation.py`，实现情绪 Accuracy、逐类 P/R/F1、Macro F1、3×3 混淆矩阵；同一标注集上的全中性基线、现有词典 fallback、FinBERT 三方对比；板块映射 Accuracy；风险多标签逐类 P/R/F1 与 10 类等权 Macro F1；证据句 Precision；10 桶 FinBERT 可靠性数据与标准多分类 Brier score。非空但非法标签、重复 ID、空 ID、key 未匹配 ID 会明确报错，不静默丢样本。
+- 词典对比：在 `sentiment_model.py` 增加强制词典入口，复用现有 fallback 的句级打分，同时保持与 FinBERT 完全相同的分句、置信度加权文章聚合和证据逻辑，没有另写近似词典公式。
+- 错误分析：所有 FinBERT 情绪误判按 article_id、标题、真实标签、预测标签和置信度写入 `data/annotation/sentiment_errors.csv`；相同内容不会重复写入或制造备份。Evaluation 页面支持按真实/预测标签过滤并下载筛选结果。
+- 页面：Evaluation 顶部明确本页只评估分类层，六维敏感性/消融另行实现；加入三方对比表、可切换引擎的混淆矩阵热力图、逐类指标、Brier、可靠性曲线、板块/风险/证据指标和错误浏览。原六维对照保留在折叠的“描述性对照（非稳健性验证）”区块。页面后台读取私有 key，但不渲染或提供下载。
+- 30 条假标注验证：构造 negative/neutral/positive 各 10 条，FinBERT 每类故意错 2 条。手算与程序一致：混淆矩阵每类对角线 8、环形误判 2，故 Accuracy=`24/30=0.8`，每类 P/R/F1 与 Macro F1 均为 0.8；全中性基线 Accuracy=`10/30=1/3`、Macro F1=`1/6`；词典引擎在定向测试文本上为 1.0。第二个手算核对：正确样本概率 `[0.8,0.1,0.1]` 的 Brier 为 0.06，错误样本为 1.46，`(24*0.06+6*1.46)/30=0.34`，与程序一致。另验证板块 Accuracy 0.9、证据句 Precision 0.8、风险 Macro F1 0.24、误判 CSV 6 行。
+- 遇到的问题和修复：首次文件级测试发现 Pandas 将 `0/1` 读成整数，旧布尔归一化把整数 0 当作空值；修正为先判断 NaN、再直接字符串化。修复后全部 8 个标准库测试通过。
+- 页面与静态验证：Evaluation 空白冷启动和 30 条已标注完整状态 AppTest 均通过，页面指标显示 FinBERT Accuracy 0.800、Macro F1 0.800、Brier 0.340；`compileall` 与 `git diff --check` 通过。运行时代码未新增 Windows 路径或凭据。
+- 当前项目状态：本阶段实现、正式抽样和验证已完成，尚未提交，等待用户验收确认后按阶段流程提交。

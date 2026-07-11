@@ -1,3 +1,10 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any
+
+import numpy as np
 import pandas as pd
 
 from src.aggregation import (
@@ -9,14 +16,30 @@ from src.aggregation import (
 )
 from src.config import (
     ATTENTION_MIN_HISTORY_DAYS,
+    ANNOTATION_ERRORS_PATH,
+    ANNOTATION_SAMPLE_SIZE,
     BASELINE_WEIGHTS,
+    CALIBRATION_BIN_COUNT,
     ENHANCED_WEIGHTS,
     FORMULA_COMPONENT_COLUMNS,
     METRIC_COLUMNS,
     METRIC_LABELS,
+    RISK_SEVERITY_WEIGHTS,
 )
 from src.keyword_signals import matched_signal_terms
+from src.preprocessing import write_csv_atomic
 from src.scoring import formula_values_from_record
+from src.sentiment_model import analyze_articles_sentiment_lexicon
+
+
+SENTIMENT_LABELS = ["negative", "neutral", "positive"]
+SENTIMENT_ERROR_FIELDS = [
+    "article_id",
+    "title",
+    "true_sentiment",
+    "predicted_sentiment",
+    "confidence",
+]
 
 
 def coverage_summary(df: pd.DataFrame) -> dict[str, int]:
@@ -95,14 +118,18 @@ def sentiment_label_from_score(score: float, threshold: float = 0.05) -> str:
     return "neutral"
 
 
-def annotation_template(df: pd.DataFrame, limit: int = 200) -> pd.DataFrame:
-    """生成可下载的人工标注 CSV 模板。"""
-    columns = ["article_id", "title", "url", "sector", "risk_category", "sentiment_score"]
-    existing_columns = [column for column in columns if column in df.columns]
-    template = df[existing_columns].head(limit).copy()
+def annotation_template(
+    df: pd.DataFrame,
+    limit: int = ANNOTATION_SAMPLE_SIZE,
+) -> pd.DataFrame:
+    """Compatibility helper that never exposes model outputs; use the sampler for stratification."""
+    columns = ["article_id", "title", "summary", "content", "url", "published_at"]
+    template = df.reindex(columns=columns).head(limit).copy()
     template["label_sentiment"] = ""
-    template["label_sector"] = ""
-    template["label_risk_category"] = ""
+    template["label_sector_ok"] = ""
+    template["label_risk_categories"] = ""
+    template["label_evidence_ok"] = ""
+    template["notes"] = ""
     return template
 
 
@@ -404,3 +431,431 @@ def formula_article_examples(df: pd.DataFrame, limit: int = 3) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def normalize_sentiment_label(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    normalized = str(value).strip().lower()
+    aliases = {
+        "positive": "positive",
+        "pos": "positive",
+        "正面": "positive",
+        "neutral": "neutral",
+        "neu": "neutral",
+        "中性": "neutral",
+        "negative": "negative",
+        "neg": "negative",
+        "负面": "negative",
+    }
+    return aliases.get(normalized, "")
+
+
+def normalize_binary_label(value: object) -> bool | None:
+    if value is None or pd.isna(value):
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "是", "正确", "合格"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "否", "错误", "不合格"}:
+        return False
+    return None
+
+
+def parse_risk_labels(value: object) -> set[str]:
+    if value is None or pd.isna(value):
+        return set()
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return set()
+    parts = {
+        part.strip()
+        for part in re.split(r"[;,|，、]+", normalized)
+        if part.strip()
+    }
+    return set() if parts <= {"none", "无", "无风险"} else parts - {"none", "无", "无风险"}
+
+
+def safe_ratio(numerator: int | float, denominator: int | float) -> float:
+    return float(numerator / denominator) if denominator else 0.0
+
+
+def classification_report(
+    y_true: list[str],
+    y_pred: list[str],
+    labels: list[str] | None = None,
+) -> dict[str, Any]:
+    labels = labels or SENTIMENT_LABELS
+    matrix = pd.DataFrame(0, index=labels, columns=labels, dtype=int)
+    for true_label, predicted_label in zip(y_true, y_pred, strict=True):
+        if true_label in labels and predicted_label in labels:
+            matrix.loc[true_label, predicted_label] += 1
+
+    rows: list[dict[str, float | int | str]] = []
+    for label in labels:
+        true_positive = int(matrix.loc[label, label])
+        false_positive = int(matrix[label].sum() - true_positive)
+        false_negative = int(matrix.loc[label].sum() - true_positive)
+        precision = safe_ratio(true_positive, true_positive + false_positive)
+        recall = safe_ratio(true_positive, true_positive + false_negative)
+        f1 = safe_ratio(2 * precision * recall, precision + recall)
+        rows.append(
+            {
+                "label": label,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "support": int(matrix.loc[label].sum()),
+                "predicted_count": int(matrix[label].sum()),
+            }
+        )
+
+    per_class = pd.DataFrame(rows)
+    sample_count = int(matrix.to_numpy().sum())
+    return {
+        "sample_count": sample_count,
+        "accuracy": safe_ratio(int(np.trace(matrix.to_numpy())), sample_count),
+        "macro_f1": float(per_class["f1"].mean()) if not per_class.empty else 0.0,
+        "per_class": per_class,
+        "confusion_matrix": matrix,
+    }
+
+
+def report_comparison_row(model_name: str, report: dict[str, Any]) -> dict[str, object]:
+    row: dict[str, object] = {
+        "model": model_name,
+        "sample_count": int(report["sample_count"]),
+        "accuracy": float(report["accuracy"]),
+        "macro_f1": float(report["macro_f1"]),
+    }
+    per_class = report["per_class"].set_index("label")
+    for label in SENTIMENT_LABELS:
+        row[f"{label}_precision"] = float(per_class.loc[label, "precision"])
+        row[f"{label}_recall"] = float(per_class.loc[label, "recall"])
+        row[f"{label}_f1"] = float(per_class.loc[label, "f1"])
+    return row
+
+
+def lexicon_sentiment_predictions(frame: pd.DataFrame) -> list[str]:
+    articles = [
+        (
+            str(row.get("title", "") or ""),
+            str(row.get("summary", "") or ""),
+            str(row.get("content", "") or ""),
+        )
+        for row in frame.fillna("").to_dict("records")
+    ]
+    results = analyze_articles_sentiment_lexicon(articles)
+    return [
+        max(
+            {
+                "positive": result.p_positive,
+                "neutral": result.p_neutral,
+                "negative": result.p_negative,
+            },
+            key={
+                "positive": result.p_positive,
+                "neutral": result.p_neutral,
+                "negative": result.p_negative,
+            }.get,
+        )
+        for result in results
+    ]
+
+
+def align_annotation_key(
+    annotations: pd.DataFrame,
+    annotation_key: pd.DataFrame,
+) -> pd.DataFrame:
+    required_annotation = {
+        "article_id",
+        "title",
+        "summary",
+        "content",
+        "label_sentiment",
+        "label_sector_ok",
+        "label_risk_categories",
+        "label_evidence_ok",
+    }
+    required_key = {
+        "article_id",
+        "predicted_sentiment_finbert",
+        "predicted_sector",
+        "predicted_risk_categories",
+        "predicted_evidence_sentence",
+        "finbert_confidence",
+        "p_positive",
+        "p_neutral",
+        "p_negative",
+    }
+    missing_annotation = sorted(required_annotation - set(annotations.columns))
+    missing_key = sorted(required_key - set(annotation_key.columns))
+    if missing_annotation:
+        raise ValueError(f"标注 CSV 缺少字段：{missing_annotation}")
+    if missing_key:
+        raise ValueError(f"annotation_key 缺少字段：{missing_key}")
+
+    prepared_annotations = annotations.copy()
+    prepared_key = annotation_key.copy()
+    prepared_annotations["article_id"] = prepared_annotations["article_id"].fillna("").astype(str)
+    prepared_key["article_id"] = prepared_key["article_id"].fillna("").astype(str)
+    if prepared_annotations["article_id"].eq("").any():
+        raise ValueError("标注 CSV 存在空 article_id。")
+    if prepared_annotations["article_id"].duplicated().any():
+        raise ValueError("标注 CSV 存在重复 article_id。")
+    if prepared_key["article_id"].duplicated().any():
+        raise ValueError("annotation_key 存在重复 article_id。")
+    unmatched = sorted(
+        set(prepared_annotations["article_id"]) - set(prepared_key["article_id"])
+    )
+    if unmatched:
+        raise ValueError(f"有 {len(unmatched)} 个 article_id 无法在 annotation_key 对账。")
+
+    merged = prepared_annotations.merge(
+        prepared_key,
+        on="article_id",
+        how="inner",
+        validate="one_to_one",
+    )
+    if merged.empty:
+        raise ValueError("标注 CSV 与 annotation_key 没有可对齐的 article_id。")
+    return merged
+
+
+def risk_multilabel_report(merged: pd.DataFrame) -> dict[str, Any]:
+    canonical_labels = list(RISK_SEVERITY_WEIGHTS)
+    labelled = merged[
+        merged["label_risk_categories"].fillna("").astype(str).str.strip().ne("")
+    ].copy()
+    if labelled.empty:
+        return {"sample_count": 0, "macro_f1": 0.0, "per_class": pd.DataFrame()}
+
+    true_sets = labelled["label_risk_categories"].apply(parse_risk_labels)
+    predicted_sets = labelled["predicted_risk_categories"].apply(parse_risk_labels)
+    unknown = sorted(set().union(*true_sets.tolist()) - set(canonical_labels))
+    if unknown:
+        raise ValueError(f"label_risk_categories 含未知类别：{unknown}")
+
+    rows: list[dict[str, float | int | str]] = []
+    for label in canonical_labels:
+        true_positive = sum(label in truth and label in prediction for truth, prediction in zip(true_sets, predicted_sets, strict=True))
+        false_positive = sum(label not in truth and label in prediction for truth, prediction in zip(true_sets, predicted_sets, strict=True))
+        false_negative = sum(label in truth and label not in prediction for truth, prediction in zip(true_sets, predicted_sets, strict=True))
+        precision = safe_ratio(true_positive, true_positive + false_positive)
+        recall = safe_ratio(true_positive, true_positive + false_negative)
+        f1 = safe_ratio(2 * precision * recall, precision + recall)
+        rows.append(
+            {
+                "risk_category": label,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "support": sum(label in truth for truth in true_sets),
+                "predicted_count": sum(label in prediction for prediction in predicted_sets),
+            }
+        )
+    per_class = pd.DataFrame(rows)
+    return {
+        "sample_count": int(len(labelled)),
+        "macro_f1": float(per_class["f1"].mean()),
+        "per_class": per_class,
+    }
+
+
+def binary_quality_summary(merged: pd.DataFrame, column: str) -> dict[str, float | int]:
+    labels = merged[column].apply(normalize_binary_label)
+    nonempty = merged[column].fillna("").astype(str).str.strip().ne("")
+    invalid = merged.loc[nonempty & labels.isna(), column].astype(str).unique().tolist()
+    if invalid:
+        raise ValueError(f"{column} 含无效值：{sorted(invalid)}")
+    valid = labels.notna()
+    values = labels[valid].astype(bool)
+    return {
+        "sample_count": int(valid.sum()),
+        "positive_count": int(values.sum()),
+        "score": float(values.mean()) if not values.empty else 0.0,
+    }
+
+
+def calibration_report(
+    sentiment_frame: pd.DataFrame,
+    bin_count: int = CALIBRATION_BIN_COUNT,
+) -> dict[str, Any]:
+    probability_columns = ["p_negative", "p_neutral", "p_positive"]
+    probabilities = sentiment_frame[probability_columns].apply(
+        pd.to_numeric, errors="coerce"
+    ).fillna(0.0).clip(0.0, 1.0)
+    row_sums = probabilities.sum(axis=1)
+    valid = row_sums.gt(0)
+    probabilities = probabilities[valid].div(row_sums[valid], axis=0)
+    evaluated = sentiment_frame.loc[valid].copy()
+    if evaluated.empty:
+        return {"sample_count": 0, "brier_score": 0.0, "reliability": pd.DataFrame()}
+
+    true_labels = evaluated["normalized_true_sentiment"].tolist()
+    predicted_labels = evaluated["normalized_finbert_prediction"].tolist()
+    probability_confidence = probabilities.max(axis=1)
+    confidences = pd.to_numeric(
+        evaluated["finbert_confidence"], errors="coerce"
+    ).fillna(probability_confidence).clip(0.0, 1.0)
+    correctness = pd.Series(
+        [true == predicted for true, predicted in zip(true_labels, predicted_labels, strict=True)],
+        index=evaluated.index,
+        dtype=float,
+    )
+
+    targets = np.zeros((len(evaluated), len(SENTIMENT_LABELS)), dtype=float)
+    label_to_index = {label: index for index, label in enumerate(SENTIMENT_LABELS)}
+    for row_index, label in enumerate(true_labels):
+        targets[row_index, label_to_index[label]] = 1.0
+    ordered_probabilities = probabilities[[f"p_{label}" for label in SENTIMENT_LABELS]].to_numpy()
+    brier_score = float(np.mean(np.sum((ordered_probabilities - targets) ** 2, axis=1)))
+
+    bin_indexes = np.minimum((confidences * bin_count).astype(int), bin_count - 1)
+    reliability_rows: list[dict[str, float | int | str]] = []
+    for bin_index in range(bin_count):
+        mask = bin_indexes.eq(bin_index)
+        if not mask.any():
+            continue
+        lower = bin_index / bin_count
+        upper = (bin_index + 1) / bin_count
+        reliability_rows.append(
+            {
+                "bin": f"[{lower:.1f}, {upper:.1f}{']' if bin_index == bin_count - 1 else ')'}",
+                "bin_lower": lower,
+                "bin_upper": upper,
+                "count": int(mask.sum()),
+                "mean_confidence": float(confidences[mask].mean()),
+                "accuracy": float(correctness[mask].mean()),
+            }
+        )
+    return {
+        "sample_count": int(len(evaluated)),
+        "brier_score": brier_score,
+        "reliability": pd.DataFrame(reliability_rows),
+    }
+
+
+def build_sentiment_errors(sentiment_frame: pd.DataFrame) -> pd.DataFrame:
+    errors = sentiment_frame[
+        sentiment_frame["normalized_true_sentiment"].ne(
+            sentiment_frame["normalized_finbert_prediction"]
+        )
+    ].copy()
+    if errors.empty:
+        return pd.DataFrame(columns=SENTIMENT_ERROR_FIELDS)
+    probability_confidence = errors[["p_positive", "p_neutral", "p_negative"]].apply(
+        pd.to_numeric, errors="coerce"
+    ).fillna(0.0).max(axis=1)
+    confidence = pd.to_numeric(
+        errors["finbert_confidence"], errors="coerce"
+    ).fillna(probability_confidence).clip(0.0, 1.0)
+    return pd.DataFrame(
+        {
+            "article_id": errors["article_id"].astype(str),
+            "title": errors["title"].fillna("").astype(str),
+            "true_sentiment": errors["normalized_true_sentiment"],
+            "predicted_sentiment": errors["normalized_finbert_prediction"],
+            "confidence": confidence,
+        }
+    ).reset_index(drop=True)
+
+
+def write_sentiment_errors(path: Path, errors: pd.DataFrame) -> None:
+    prepared = errors.reindex(columns=SENTIMENT_ERROR_FIELDS).copy()
+    if path.exists() and path.stat().st_size > 0:
+        try:
+            existing = pd.read_csv(path, encoding="utf-8-sig").reindex(
+                columns=SENTIMENT_ERROR_FIELDS
+            )
+            if existing.fillna("").astype(str).equals(
+                prepared.fillna("").astype(str)
+            ):
+                return
+        except (OSError, UnicodeDecodeError, pd.errors.ParserError):
+            pass
+    write_csv_atomic(path, SENTIMENT_ERROR_FIELDS, prepared.to_dict("records"))
+
+
+def evaluate_model_annotations(
+    annotations: pd.DataFrame,
+    annotation_key: pd.DataFrame,
+    error_output_path: Path | None = ANNOTATION_ERRORS_PATH,
+) -> dict[str, Any]:
+    """Evaluate classification outputs against a completed blind annotation file."""
+    merged = align_annotation_key(annotations, annotation_key)
+    merged["normalized_true_sentiment"] = merged["label_sentiment"].apply(
+        normalize_sentiment_label
+    )
+    merged["normalized_finbert_prediction"] = merged[
+        "predicted_sentiment_finbert"
+    ].apply(normalize_sentiment_label)
+    raw_sentiment = merged["label_sentiment"].fillna("").astype(str).str.strip()
+    invalid_sentiment = merged.loc[
+        raw_sentiment.ne("") & merged["normalized_true_sentiment"].eq(""),
+        "label_sentiment",
+    ].astype(str).unique().tolist()
+    if invalid_sentiment:
+        raise ValueError(f"label_sentiment 含无效值：{sorted(invalid_sentiment)}")
+    if merged["normalized_finbert_prediction"].eq("").any():
+        raise ValueError("annotation_key 含无效 FinBERT 情绪预测。")
+    sentiment_frame = merged[
+        merged["normalized_true_sentiment"].isin(SENTIMENT_LABELS)
+        & merged["normalized_finbert_prediction"].isin(SENTIMENT_LABELS)
+    ].copy()
+
+    reports: dict[str, dict[str, Any]] = {}
+    comparison = pd.DataFrame()
+    errors = pd.DataFrame(columns=SENTIMENT_ERROR_FIELDS)
+    calibration = {"sample_count": 0, "brier_score": 0.0, "reliability": pd.DataFrame()}
+    if not sentiment_frame.empty:
+        true_labels = sentiment_frame["normalized_true_sentiment"].tolist()
+        predictions = {
+            "全中性基线": ["neutral"] * len(sentiment_frame),
+            "词典引擎": lexicon_sentiment_predictions(sentiment_frame),
+            "FinBERT": sentiment_frame["normalized_finbert_prediction"].tolist(),
+        }
+        reports = {
+            model: classification_report(true_labels, predicted)
+            for model, predicted in predictions.items()
+        }
+        comparison = pd.DataFrame(
+            [report_comparison_row(model, report) for model, report in reports.items()]
+        )
+        calibration = calibration_report(sentiment_frame)
+        errors = build_sentiment_errors(sentiment_frame)
+        if error_output_path is not None:
+            write_sentiment_errors(error_output_path, errors)
+
+    sector = binary_quality_summary(merged, "label_sector_ok")
+    evidence = binary_quality_summary(merged, "label_evidence_ok")
+    risk = risk_multilabel_report(merged)
+    return {
+        "aligned_count": int(len(merged)),
+        "sentiment_labelled_count": int(len(sentiment_frame)),
+        "sentiment_reports": reports,
+        "sentiment_comparison": comparison,
+        "sector_mapping": {
+            "sample_count": sector["sample_count"],
+            "correct_count": sector["positive_count"],
+            "accuracy": sector["score"],
+        },
+        "risk": risk,
+        "evidence": {
+            "sample_count": evidence["sample_count"],
+            "accepted_count": evidence["positive_count"],
+            "precision": evidence["score"],
+        },
+        "calibration": calibration,
+        "sentiment_errors": errors,
+    }
+
+
+def evaluate_annotation_files(
+    annotation_path: Path,
+    key_path: Path,
+    error_output_path: Path | None = ANNOTATION_ERRORS_PATH,
+) -> dict[str, Any]:
+    annotations = pd.read_csv(annotation_path, encoding="utf-8-sig")
+    annotation_key = pd.read_csv(key_path, encoding="utf-8-sig")
+    return evaluate_model_annotations(annotations, annotation_key, error_output_path)

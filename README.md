@@ -16,7 +16,7 @@
 - 板块比较：比较 11 个 GICS 风格板块的 Optimism、Fear、Uncertainty、Attention、Disagreement、Risk Intensity。
 - 板块详情：查看单板块雷达图、趋势框架、重点公司、主题、证据句和高风险新闻。
 - 文章浏览器：查看处理后的新闻列表，支持发布时间、来源、板块、风险类别筛选及按 `event_id` 分组，URL 可点击跳转。
-- 评估：展示覆盖统计、输出分布、Baseline vs Enhanced 六维对照、板块排名变化和具体新闻算例，并提供人工标注 CSV 模板下载和准确率计算接口。
+- 评估：提供 300 条分层盲标、全中性/词典/FinBERT 三方分类对比、混淆矩阵、风险与证据句指标、FinBERT 校准和错误样本分析；六维公式描述性对照保留为独立区块。
 - RSS 抓取：支持 Yahoo Finance ticker RSS、CNBC Top News RSS、MarketWatch Top Stories RSS；不使用已停止服务的 Reuters RSS。
 
 ## 3. 数据来源与存储
@@ -199,3 +199,24 @@ Unregister-ScheduledTask -TaskName SectorSentimentRSSCollector -Confirm:$false
 python -m src.event_clustering --input data/real_processed_articles.csv --engine embedding
 python -m src.event_clustering --input data/real_processed_articles.csv --engine lexical --dry-run
 ```
+
+## 13. 模型评估工具链
+
+从完整 raw 累积新闻生成 300 条盲标样本：
+
+```bash
+python scripts/sample_for_annotation.py
+```
+
+脚本按预测板块 × FinBERT 三分类做确定性轮询均衡抽样，默认随机种子为 `5720`；容量不足的小层取尽后，剩余名额分配给仍有候选的层。输出：
+
+- `data/annotation/annotation_blind.csv`：只含文章原文、URL、时间和空白人工标签，严禁包含预测字段。
+- `data/annotation/annotation_key.csv`：私有对账文件，保存 FinBERT 情绪概率、置信度、预测板块、风险类别和证据句，不提供给第一遍主标注者。
+- `data/annotation/sentiment_errors.csv`：评估后导出的全部 FinBERT 情绪误判。
+- `docs/annotation_guide.md`：情绪边界、风险类别、证据句标准和两遍标注流程。
+
+两遍流程用于同时满足盲标与 `sector_ok/evidence_ok`：主标注者先在看不到预测的情况下完成情绪和风险；标签锁定后，评估负责人保管私有 key，只补充板块与证据句对账结果。
+
+Evaluation 页面在填写标签后计算：情绪 Accuracy、逐类 Precision/Recall/F1、Macro F1 和 3×3 混淆矩阵；同一标注集上的全中性基线、现有词典 fallback 与 FinBERT 三方对比；板块映射 Accuracy；风险多标签逐类 P/R/F1 与 Macro F1；证据句 Precision；FinBERT 可靠性分桶和多分类 Brier score。风险 Macro F1 当前对配置中的 10 个规范风险类别等权计算，无支持类别按 0 计入，页面同时展示 support 便于解释。
+
+本批只评估文章分类层。六维指标层的敏感性分析、正式消融和稳健性验证属于后续批次。

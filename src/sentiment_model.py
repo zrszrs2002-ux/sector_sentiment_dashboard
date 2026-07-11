@@ -402,15 +402,11 @@ def aggregate_article_sentiment(title: str, sentence_results: list[SentenceSenti
     )
 
 
-def analyze_articles_sentiment(articles: list[tuple[str, str, str]]) -> list[ArticleSentiment]:
-    """跨文章收集句子后按当前 FINBERT_BATCH_SIZE 环境配置批量推理。"""
-    sentence_groups = [
-        article_sentences(title, summary, content)
-        for title, summary, content in articles
-    ]
-    flat_sentences = [sentence for sentences in sentence_groups for sentence in sentences]
-    flat_results = score_sentences(flat_sentences)
-
+def aggregate_sentiment_groups(
+    articles: list[tuple[str, str, str]],
+    sentence_groups: list[list[str]],
+    flat_results: list[SentenceSentiment],
+) -> list[ArticleSentiment]:
     article_results: list[ArticleSentiment] = []
     cursor = 0
     for (title, _summary, _content), sentences in zip(articles, sentence_groups, strict=True):
@@ -418,6 +414,32 @@ def analyze_articles_sentiment(articles: list[tuple[str, str, str]]) -> list[Art
         article_results.append(aggregate_article_sentiment(title, flat_results[cursor:next_cursor]))
         cursor = next_cursor
     return article_results
+
+
+def analyze_articles_sentiment(articles: list[tuple[str, str, str]]) -> list[ArticleSentiment]:
+    """跨文章收集句子后按当前 FINBERT_BATCH_SIZE 环境配置批量推理。"""
+    sentence_groups = [
+        article_sentences(title, summary, content)
+        for title, summary, content in articles
+    ]
+    flat_sentences = [sentence for sentences in sentence_groups for sentence in sentences]
+    return aggregate_sentiment_groups(articles, sentence_groups, score_sentences(flat_sentences))
+
+
+def analyze_articles_sentiment_lexicon(
+    articles: list[tuple[str, str, str]],
+) -> list[ArticleSentiment]:
+    """Force the existing fallback engine while preserving article aggregation."""
+    sentence_groups = [
+        article_sentences(title, summary, content)
+        for title, summary, content in articles
+    ]
+    flat_sentences = [sentence for sentences in sentence_groups for sentence in sentences]
+    return aggregate_sentiment_groups(
+        articles,
+        sentence_groups,
+        score_sentences_lexicon(flat_sentences),
+    )
 
 
 def analyze_article_sentiment(title: str, summary: str, content: str) -> ArticleSentiment:
