@@ -1,5 +1,4 @@
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -7,7 +6,8 @@ from src.aggregation import market_metrics, sector_metrics
 from src.brief_generator import read_latest_brief
 from src.config import DISCLAIMER, METRIC_COLUMNS, METRIC_LABELS, WORKING_SET_DAYS
 from src.driver_analysis import top_driver_articles
-from src.ui_helpers import load_selected_articles
+from src.rss_sources import distinct_value_count
+from src.ui_helpers import load_selected_articles, render_sector_heatmap
 
 
 def render_radar(scores: dict[str, float], title: str) -> None:
@@ -36,6 +36,19 @@ def fmt_time(value: object) -> str:
     if value is None or pd.isna(value):
         return "暂无"
     return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def fmt_time_short(value: object) -> str:
+    if value is None or pd.isna(value):
+        return "暂无"
+    return pd.Timestamp(value).strftime("%m-%d %H:%M")
+
+
+def fmt_iso_short(value: object) -> str:
+    try:
+        return pd.Timestamp(str(value)).strftime("%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return str(value or "")
 
 
 def markdown_article_link(title: object, url: object) -> str:
@@ -71,7 +84,8 @@ def render_driver_events(drivers: pd.DataFrame) -> None:
                 for article in row.get("event_articles", []):
                     st.markdown(
                         f"- {markdown_article_link(article.get('title'), article.get('url'))}  "
-                        f"  {article.get('source', '')} · {fmt_time(article.get('published_at'))}"
+                        f"  {article.get('publisher', '') or article.get('source', '')} · "
+                        f"{fmt_time(article.get('published_at'))}"
                     )
         st.divider()
 
@@ -100,9 +114,16 @@ st.warning(DISCLAIMER)
 
 metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 metric_col1.metric("窗口内新闻数", f"{len(df):,}")
-metric_col2.metric("覆盖来源数", f"{df['source'].nunique():,}")
+metric_col2.metric(
+    "覆盖出版方数",
+    f"{distinct_value_count(df['publisher'] if 'publisher' in df else df.get('source', []), df.get('source', [])):,}",
+)
 metric_col3.metric("数据窗口", f"近 {WORKING_SET_DAYS} 天")
-metric_col4.metric("数据更新时间", fmt_time(data_updated_at))
+metric_col4.metric(
+    "数据更新时间",
+    fmt_time_short(data_updated_at),
+    help=f"完整时间：{fmt_time(data_updated_at)}，随每次抓取刷新。",
+)
 
 left_col, right_col = st.columns([1.05, 0.95])
 with left_col:
@@ -117,6 +138,19 @@ with left_col:
 with right_col:
     st.subheader("每日市场简报")
     st.caption(brief_source_label)
+    if brief_content:
+        snapshot_id = str(brief_meta.get("data_snapshot_id", ""))
+        brief_article_count = snapshot_id.split("|")[-1] if snapshot_id.count("|") >= 2 else ""
+        window_label = (
+            f"{fmt_iso_short(brief_meta.get('data_window_start'))} – "
+            f"{fmt_iso_short(brief_meta.get('data_window_end'))} UTC"
+        )
+        count_label = f"{brief_article_count} 条新闻" if brief_article_count else "生成时窗口内新闻"
+        st.info(
+            f"本简报基于 {count_label}（窗口 {window_label}），"
+            f"生成于 {fmt_iso_short(brief_generated_at)}；"
+            f"页面其余指标为当前实时窗口（{len(df):,} 条），数字可能与简报不同。"
+        )
     with st.container(height=600, border=True):
         if brief_content:
             st.markdown(brief_content)
@@ -124,15 +158,7 @@ with right_col:
             st.info("暂无 latest_brief.md。抓取管线会在每日生成时刻后自动生成；也可以在侧边栏手动确认重新生成。")
 
 st.subheader("Sector Heatmap")
-heatmap_df = sector_df.set_index("sector")[METRIC_COLUMNS].rename(columns=METRIC_LABELS)
-fig = px.imshow(
-    heatmap_df,
-    text_auto=".1f",
-    aspect="auto",
-    color_continuous_scale="RdYlGn",
-)
-fig.update_layout(height=430)
-st.plotly_chart(fig, use_container_width=True)
+render_sector_heatmap(sector_df)
 
 st.subheader("Top Market Drivers")
 render_driver_events(top_driver_articles(df, limit=5))

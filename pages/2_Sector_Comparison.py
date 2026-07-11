@@ -1,10 +1,9 @@
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 from src.aggregation import sector_metrics
 from src.config import METRIC_COLUMNS, METRIC_LABELS
-from src.ui_helpers import load_selected_articles
+from src.ui_helpers import load_selected_articles, render_sector_heatmap
 
 
 df, source_mode = load_selected_articles()
@@ -44,23 +43,34 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Sector Heatmap")
-heatmap_df = sector_df.set_index("sector")[METRIC_COLUMNS].rename(columns=METRIC_LABELS)
-heatmap_fig = px.imshow(
-    heatmap_df,
-    text_auto=".1f",
-    aspect="auto",
-    color_continuous_scale="RdYlGn",
-)
-heatmap_fig.update_layout(height=430)
-st.plotly_chart(heatmap_fig, use_container_width=True)
+render_sector_heatmap(sector_df)
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.dataframe(sector_df.nlargest(5, "optimism")[["sector", "optimism"]], hide_index=True)
-col2.dataframe(sector_df.nlargest(5, "fear")[["sector", "fear"]], hide_index=True)
-col3.dataframe(sector_df.nlargest(5, "uncertainty")[["sector", "uncertainty"]], hide_index=True)
-col4.dataframe(sector_df.nlargest(5, "disagreement")[["sector", "disagreement"]], hide_index=True)
-col5.dataframe(sector_df.nlargest(5, "risk_intensity")[["sector", "risk_intensity"]], hide_index=True)
+st.subheader("板块排名速览")
+ranking_specs = [
+    ("optimism", "最乐观板块"),
+    ("fear", "恐惧度最高"),
+    ("uncertainty", "不确定性最高"),
+    ("attention", "关注度最高"),
+    ("disagreement", "分歧度最高"),
+    ("risk_intensity", "风险强度最高"),
+]
+ranking_rows = [st.columns(3), st.columns(3)]
+for index, (metric_column, ranking_title) in enumerate(ranking_specs):
+    with ranking_rows[index // 3][index % 3]:
+        st.markdown(f"**{ranking_title}**")
+        ranking_table = sector_df.nlargest(5, metric_column)[["sector", metric_column]].copy()
+        ranking_table[metric_column] = ranking_table[metric_column].astype(float).round(1)
+        ranking_table.columns = ["板块", METRIC_LABELS[metric_column]]
+        st.dataframe(ranking_table, hide_index=True, use_container_width=True)
 
 st.subheader("板块指标表")
-display_df = sector_df.rename(columns={"sector": "Sector", **METRIC_LABELS})
+display_df = sector_df.copy()
+for metric_column in METRIC_COLUMNS:
+    display_df[metric_column] = display_df[metric_column].astype(float).round(1)
+if "article_count" in display_df:
+    display_df["article_count"] = display_df["article_count"].astype(int)
+ordered_columns = [column for column in ["sector", "article_count", *METRIC_COLUMNS] if column in display_df]
+display_df = display_df[ordered_columns].rename(
+    columns={"sector": "板块", "article_count": "新闻数", **METRIC_LABELS}
+)
 st.dataframe(display_df, use_container_width=True, hide_index=True)

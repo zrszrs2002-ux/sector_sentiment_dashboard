@@ -109,6 +109,7 @@ def articles_to_dataframe(records: list[dict[str, str]]) -> pd.DataFrame:
         "model_confidence",
         "relevance_weight",
         "time_weight",
+        "source_weight",
         "agg_weight",
         "dedup_factor",
         "source_count",
@@ -195,13 +196,13 @@ def write_daily_snapshots(records: list[dict[str, str]], data_source: str) -> di
         SECTOR_DAILY_SCORES_PATH,
         SECTOR_SNAPSHOT_FIELDS,
         sector_rows,
-        ["snapshot_date", "data_source", "formula_version", "sector"],
+        ["snapshot_date", "data_source", "formula_version", "pipeline_revision", "sector"],
     )
     _upsert_rows(
         MARKET_DAILY_SCORES_PATH,
         MARKET_SNAPSHOT_FIELDS,
         market_rows,
-        ["snapshot_date", "data_source", "formula_version"],
+        ["snapshot_date", "data_source", "formula_version", "pipeline_revision"],
     )
     return {
         "snapshot_date": snapshot_date,

@@ -80,19 +80,21 @@ if snapshot_day_count < 2:
         )
 else:
     plot_df = snapshot_trend.copy()
-    plot_df["snapshot_date_label"] = pd.to_datetime(plot_df["snapshot_date"]).dt.strftime("%b %d")
+    plot_df["snapshot_date_label"] = pd.to_datetime(plot_df["snapshot_date"]).dt.strftime("%m-%d")
     date_order = plot_df["snapshot_date_label"].drop_duplicates().tolist()
+    plot_df = plot_df.rename(columns=METRIC_LABELS)
+    chinese_metric_columns = [METRIC_LABELS[column] for column in METRIC_COLUMNS]
     trend_fig = px.line(
         plot_df,
         x="snapshot_date_label",
-        y=METRIC_COLUMNS,
+        y=chinese_metric_columns,
         markers=True,
         category_orders={"snapshot_date_label": date_order},
-        labels={**METRIC_LABELS, "snapshot_date_label": "snapshot_date"},
         title="基于每日聚合快照的六维趋势",
     )
     trend_fig.update_traces(mode="lines+markers")
     trend_fig.update_xaxes(type="category")
+    trend_fig.update_layout(legend_title_text="指标", xaxis_title="快照日期", yaxis_title="分数（0-100）")
     st.plotly_chart(trend_fig, use_container_width=True)
 
 col1, col2, col3 = st.columns(3)
@@ -114,6 +116,11 @@ with col3:
     risks.columns = ["risk_category", "count"]
     st.dataframe(risks, use_container_width=True, hide_index=True)
 
+news_column_config = {
+    **url_column_config(),
+    "sentiment_score": st.column_config.NumberColumn("情绪分", format="%.3f"),
+}
+
 st.subheader("Top positive news")
 st.dataframe(
     sector_articles.sort_values("sentiment_score", ascending=False)[
@@ -121,7 +128,7 @@ st.dataframe(
     ],
     use_container_width=True,
     hide_index=True,
-    column_config=url_column_config(),
+    column_config=news_column_config,
 )
 
 st.subheader("Top negative news")
@@ -131,7 +138,7 @@ st.dataframe(
     ],
     use_container_width=True,
     hide_index=True,
-    column_config=url_column_config(),
+    column_config=news_column_config,
 )
 
 st.subheader("Key evidence sentences")

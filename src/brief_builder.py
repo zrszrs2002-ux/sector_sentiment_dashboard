@@ -9,6 +9,7 @@ from src.aggregation import market_metrics, sector_metrics
 from src.config import BRIEF_WINDOW_HOURS, METRIC_COLUMNS, SECTORS
 from src.daily_snapshots import load_market_snapshots, load_sector_snapshots
 from src.driver_analysis import macro_articles, top_driver_articles
+from src.rss_sources import distinct_value_count
 
 
 def _utc_now() -> datetime:
@@ -155,12 +156,28 @@ def _drivers(df: pd.DataFrame) -> list[dict[str, Any]]:
     drivers = top_driver_articles(df, limit=5)
     rows: list[dict[str, Any]] = []
     for row in drivers.to_dict("records"):
+        evidence_sentence = str(row.get("evidence_sentence", ""))
+        event_id = str(row.get("event_id", ""))
+        if event_id and "content_level" in df and "event_id" in df:
+            fulltext_members = df[
+                df["event_id"].fillna("").astype(str).eq(event_id)
+                & df["content_level"].fillna("").astype(str).eq("fulltext")
+            ].copy()
+            if not fulltext_members.empty:
+                fulltext_members["_weight"] = pd.to_numeric(
+                    fulltext_members.get("agg_weight", 0), errors="coerce"
+                ).fillna(0)
+                evidence_sentence = str(
+                    fulltext_members.sort_values("_weight", ascending=False).iloc[0].get(
+                        "evidence_sentence", evidence_sentence
+                    )
+                )
         rows.append(
             {
                 "title": str(row.get("title", "")),
                 "sector": str(row.get("sector", "")),
                 "driver_reason": str(row.get("driver_reason", "")),
-                "evidence_sentence": str(row.get("evidence_sentence", "")),
+                "evidence_sentence": evidence_sentence,
                 "url": str(row.get("url", "")),
                 "source_count": int(row.get("source_count", 0) or 0),
                 "related_article_count": int(row.get("event_article_count", 1) or 1),
@@ -286,7 +303,10 @@ def build_brief_payload(df: pd.DataFrame, data_source: str, generated_at: dateti
         else [],
         "coverage": {
             "article_count": int(len(window_df)),
-            "source_count": int(window_df["source"].nunique()) if "source" in window_df else 0,
+            "source_count": distinct_value_count(
+                window_df["publisher"] if "publisher" in window_df else window_df.get("source", []),
+                window_df.get("source", []),
+            ),
             "time_range": {
                 "min_published_at": _iso_or_none(valid_times.min()) if not valid_times.empty else None,
                 "max_published_at": _iso_or_none(valid_times.max()) if not valid_times.empty else None,

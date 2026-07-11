@@ -21,6 +21,31 @@ from src.config import (
     SIMILAR_TITLE_THRESHOLD,
 )
 
+# UTF-8 文本被错误按 cp1252 解码后的常见伪码序列 → 正确字符。
+# 2026-07-12 核查结论：当前存量数据不含任何伪码（此前审计看到的"It??s"是
+# GBK 控制台渲染 U+2019 弯引号的显示假象，数据本身是正规 Unicode），
+# 因此不做存量迁移；此表仅作为对未来编码异常 RSS 源的采集端防御。
+_MOJIBAKE_REPLACEMENTS = {
+    "â€™": "'",    # â€™ → 右单引号
+    "â€˜": "'",    # â€˜ → 左单引号
+    "â€œ": '"',    # â€œ → 左双引号
+    "â€": '"',    # â€? → 右双引号
+    "â€“": "-",    # â€“ → en dash
+    "â€”": "-",    # â€” → em dash
+    "â€¦": "...",  # â€¦ → 省略号
+    "Â ": " ",          # Â+不间断空格 → 普通空格
+}
+
+
+def repair_mojibake(text: str) -> str:
+    """修复常见 cp1252 误解码伪码并移除 U+FFFD 替换符；正常文本原样返回。"""
+    value = str(text or "")
+    for broken, fixed in _MOJIBAKE_REPLACEMENTS.items():
+        if broken in value:
+            value = value.replace(broken, fixed)
+    return value.replace("�", "")
+
+
 def parse_utc_datetime(value: object) -> datetime:
     """把输入时间解析为 UTC datetime；解析失败时显式抛错，避免污染时间权重。"""
     if not value:

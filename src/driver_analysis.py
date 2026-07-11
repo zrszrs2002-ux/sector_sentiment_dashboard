@@ -21,14 +21,19 @@ def normalized_weight_score(weights: pd.Series) -> pd.Series:
     return clean_weights / max_weight * 100
 
 
+# 驱动理由文案统一在此维护（面向用户的语言，不出现内部实现细节）。
 def driver_reason(row: pd.Series) -> str:
     if str(row.get("sector", "")) == "Unmapped":
-        return "宏观/市场级新闻，进入 Market Brief 和 Top Drivers，但不摊入板块聚合。"
+        return "宏观/市场级新闻：影响整体市场情绪解读，不属于单一板块。"
     if float(row.get("risk_intensity", 0)) >= 70:
-        return "风险强度较高，可能影响板块情绪。"
+        return "包含明确的高强度风险因素，可能对板块情绪造成压力。"
     if abs(float(row.get("sentiment_score", 0))) >= 0.25:
         return "情绪方向明显，可能推动乐观或恐惧指标。"
-    return "综合风险、情绪幅度、不确定性和聚合权重后排名靠前。"
+    return "综合风险、情绪与关注信号后排名靠前。"
+
+
+def coverage_reason(source_count: int) -> str:
+    return f"获 {int(source_count)} 家媒体共同报道，重要性上调。"
 
 
 def add_driver_scores(df: pd.DataFrame) -> pd.DataFrame:
@@ -77,9 +82,8 @@ def _representative(group: pd.DataFrame) -> pd.Series:
 
 def _distinct_source_count(group: pd.DataFrame) -> int:
     sources: set[str] = set()
-    if "source" in group:
-        for value in group["source"]:
-            sources.update(split_sources(value))
+    for row in group.to_dict("records"):
+        sources.update(split_sources(row.get("publisher", "") or row.get("source", "")))
     stored_count = 0
     if "source_count" in group:
         values = pd.to_numeric(group["source_count"], errors="coerce").fillna(0)
@@ -94,7 +98,17 @@ def collapse_articles_by_event(df: pd.DataFrame) -> pd.DataFrame:
 
     working = _with_event_keys(df)
     rows: list[dict[str, object]] = []
-    article_fields = ["article_id", "title", "source", "published_at", "url", "agg_weight"]
+    article_fields = [
+        "article_id",
+        "title",
+        "source",
+        "publisher",
+        "published_at",
+        "url",
+        "agg_weight",
+        "content_level",
+        "evidence_sentence",
+    ]
     if "driver_score" in working:
         article_fields.append("driver_score")
 
@@ -126,9 +140,10 @@ def event_driver_rows(df: pd.DataFrame) -> pd.DataFrame:
     events["driver_score"] = pd.to_numeric(events["driver_score"], errors="coerce").fillna(0)
     events.loc[events["coverage_boost_applied"], "driver_score"] *= EVENT_COVERAGE_BOOST
     events["driver_score"] = events["driver_score"].clip(upper=100 * EVENT_COVERAGE_BOOST)
-    events.loc[events["coverage_boost_applied"], "driver_reason"] = events.loc[
-        events["coverage_boost_applied"], "driver_reason"
-    ].astype(str) + f" 覆盖至少 3 家媒体，事件分数乘以 {EVENT_COVERAGE_BOOST:.2f}。"
+    boosted = events["coverage_boost_applied"]
+    events.loc[boosted, "driver_reason"] = events.loc[boosted, "driver_reason"].astype(str) + " " + source_counts[
+        boosted
+    ].astype(int).map(coverage_reason)
     return events
 
 

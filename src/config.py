@@ -29,6 +29,7 @@ def get_hf_token() -> str:
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 DICTIONARY_DIR = DATA_DIR / "dictionaries"
+RSS_SOURCES_PATH = DATA_DIR / "rss_sources.json"
 DEMO_PROCESSED_ARTICLES_PATH = DATA_DIR / "processed_articles.csv"
 RAW_ARTICLES_PATH = DATA_DIR / "raw_articles.csv"
 REAL_PROCESSED_ARTICLES_PATH = DATA_DIR / "real_processed_articles.csv"
@@ -41,6 +42,7 @@ SECTOR_DAILY_SCORES_PATH = DATA_DIR / "sector_daily_scores.csv"
 MARKET_DAILY_SCORES_PATH = DATA_DIR / "market_daily_scores.csv"
 LATEST_BRIEF_PATH = DATA_DIR / "latest_brief.md"
 BRIEF_ARCHIVE_DIR = DATA_DIR / "briefs"
+FULLTEXT_CACHE_PATH = DATA_DIR / "fulltext_cache.json"
 CSV_EXPORT_ENCODING = "utf-8-sig"
 BACKUP_RETENTION_COUNT = 10
 WORKING_SET_DAYS = 30
@@ -56,11 +58,16 @@ RSS_USER_AGENT = (
     "(practical research tool; contact: local-user; RSS title-summary-url only)"
 )
 RSS_REQUEST_TIMEOUT_SECONDS = 12
-RSS_MAX_ENTRIES_PER_FEED = 20
-CNBC_TOP_NEWS_RSS = "https://www.cnbc.com/id/100003114/device/rss/rss.html"
-MARKETWATCH_TOP_STORIES_RSS = "https://feeds.marketwatch.com/marketwatch/topstories"
-YAHOO_FINANCE_RSS_TEMPLATE = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+FULLTEXT_MAX_PER_RUN = 30
+FULLTEXT_DRIVER_CANDIDATE_COUNT = 10
+FULLTEXT_REQUEST_TIMEOUT_SECONDS = 10
+FULLTEXT_RATE_LIMIT_SECONDS = 1.0
+FULLTEXT_MIN_CHARS = 200
+# TODO: RSS source_weight 当前为来源类型先验；待人工标注和误差分析后校准。
+# content_level/rescored 将用于第二冲刺“摘要版 vs 正文版”信号对比评估。
 
+# 全句平均对长文本存在中性稀释，正式分数统一用摘要口径保证可比性；
+# 正文口径留档待第二阶段标注数据裁决。
 SIMILAR_TITLE_THRESHOLD = 0.9
 SIMILAR_PREFIX_TOKEN_COUNT = 5
 
@@ -137,14 +144,26 @@ FORMULA_COMPONENT_COLUMNS = [
     "entropy_norm",
 ]
 
+FULLTEXT_SENTIMENT_COLUMNS = [
+    "sentiment_score_fulltext",
+    "p_positive_fulltext",
+    "p_neutral_fulltext",
+    "p_negative_fulltext",
+]
+
 EXPECTED_ARTICLE_COLUMNS = [
     "article_id",
+
     "event_id",
     "source",
+    "publisher",
     "source_count",
     "title",
     "summary",
     "content",
+    "body_text",
+    "content_level",
+    "rescored",
     "url",
     "published_at",
     "collected_at",
@@ -158,6 +177,7 @@ EXPECTED_ARTICLE_COLUMNS = [
     "p_positive",
     "p_neutral",
     "p_negative",
+    *FULLTEXT_SENTIMENT_COLUMNS,
     *FORMULA_COMPONENT_COLUMNS,
     "optimism",
     "fear",
@@ -172,6 +192,7 @@ EXPECTED_ARTICLE_COLUMNS = [
     "model_confidence",
     "relevance_weight",
     "time_weight",
+    "source_weight",
     "agg_weight",
     "is_duplicate",
     "dedup_factor",
@@ -227,7 +248,7 @@ EVENT_COVERAGE_BOOST = 1.15
 EVENT_EMBED_BATCH_SIZE = 64
 
 # 数据管线语义修订号；用于解释每日快照趋势中的公式/标签断点。
-PIPELINE_REVISION = "r2"
+PIPELINE_REVISION = "r3"
 
 LLM_ENABLED = True
 # The runtime attempts candidates in order; models.list is logging context only.

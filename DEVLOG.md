@@ -271,3 +271,50 @@
 - 验收与提交：用户确认 P0 信号质量修复验收通过，批准按阶段流程执行 `git add -A` 并以本阶段名称提交。
 - 延期事项 1：Chevron 与 Microsoft 的混叙事簇已登记，complete-link 或簇代表一致性约束留待后续批次，本批不继续修改事件聚类。
 - 延期事项 2：macro risk 词表暂不继续手工调节；待人工标注评估给出 precision/recall，尤其是召回率后，再依据数据调整强弱词和触发门槛。
+
+## 2026-07-11 21:51
+
+- 阶段名称 / 本次操作目标：数据源扩展与选择性正文抓取。RSS 配置外置、真实出版方、来源质量权重、Trafilatura 正文缓存和 r3 快照连续性在同一批落地。
+- RSS 外置与实测：新增 `data/rss_sources.json` 和严格配置加载器，运行时代码不再硬编码 Yahoo/CNBC/MarketWatch URL。最终启用 20 个源：Yahoo ticker template；CNBC Top/Markets/Technology/Economy/Earnings/Business；MarketWatch Top/Real-time/Market Pulse；Google News Business/Markets；Nasdaq Markets/Earnings；Benzinga Markets；Motley Fool；Investing.com Stock Market News；Fortune；Business Insider；NYT Business。最终实跑 62 个具体 feed（其中 Yahoo 43 个 ticker），全部成功，解析 1,285 条。
+- 候选淘汰：Motley Fool 旧入口首测短暂为 0 条、复测恢复 50 条后纳入；其 `/a/feeds/foolwatch` 入口持续 401。Fortune Finance 为 404；WSJ Markets 虽返回 20 条，但发布时间全部停在 2025-01-27，按陈旧失效排除。Nasdaq Technology、Benzinga root 和 Business Insider custom/all 可解析但与已选源高度重复，未重复收录。
+- Publisher：从 RSS entry 的 `source/publisher/dc_publisher` 依次提取真实出版方，缺失时回退 feed 名；重复 URL+标题会合并 publisher。事件 `source_count`、Top Driver 覆盖加成、市场总览“覆盖出版方数”、简报覆盖和 Evaluation 覆盖统一改为 publisher 口径，并对 Demo/旧空值逐行回退 source。历史 entry 未保存出版方时保留 feed 名是预期迁移限制。
+- 来源权重：`agg_weight` 改为 `time_weight * relevance_weight * dedup_factor * source_weight`。权重从外置 JSON 读取，取值覆盖 `0.8/0.85/0.9/0.95/1.0`；跨 feed 合并取最大权重。2,535 条最终 processed 数据按持久化小数复算的最大绝对误差为 `6e-7`。权重是待人工标注校准的来源类型先验。
+- 选择性正文：新增 `src/fulltext_fetcher.py` 和 `trafilatura==2.1.0`。候选限定为 UTC 当日的 Top Driver、`|sentiment_score|>=0.5`、`risk_intensity>=60` 或多篇事件代表，按优先级排序并每轮最多 30 篇；请求间隔至少 1 秒、超时 10 秒、单篇失败不重试。付费墙/聚合跳转源由配置禁止正文。缓存同时记录成功正文和失败尝试，article_id、URL、规范化标题任一已缓存即不再请求。
+- 正文数据契约：新增 `body_text/content_level/rescored`；`content` 继续等于 RSS 摘要。成功正文批量重跑 FinBERT、证据句、风险、主题与文章评分，并在简报 Top Driver 中优先采用同事件 fulltext 证据句。页面代码不引用 `body_text`，Article Explorer 只显示 publisher、权重和正文级别标记。
+- 真实运行：首轮 19 源解析 1,265 条、新增 338 条，正文 30 次请求成功 26、失败 4，RSS 27.0 秒、正文 41.4 秒、总计 85.5 秒。加入 Motley Fool 后最终 20 源解析 1,285 条、新增 24 条，正文缓存排除首轮对象后仅剩 11 个候选，成功 10、失败 1，RSS 31.1 秒、正文 15.3 秒、总计 60.4 秒。两轮合计正文成功 36/41（87.8%），平均正文长度 4,030 字符；最终 raw/processed 各 2,535 条。
+- 摘要/正文样例：`Palo Alto Networks May Need a Breather...` 从 `-0.782` 变为 `0.385`，新证据句为 “Guidance implied $3.35 billion...” ；`3 Phenomenal Artificial Intelligence...` 从 `-0.963` 变为 `0.090`，证据句转为 TSMC 市场地位与执行；`Oil Prices Are Plunging...` 从 `-0.917` 变为 `0.030`，证据句转为对大盘涨势基础的审慎判断。三个例子表明标题/短摘要的极性可能被正文语境显著修正。
+- r3 连续性：`PIPELINE_REVISION` 升为 `r3`，原因是源结构和来源权重会改变新闻量、Attention 与所有加权指标。快照 upsert 主键补入 `pipeline_revision`，并从已提交 P0 数据恢复同日 r2；当前板块快照 `r1/r2/r3=66/22/22`，市场快照 `6/2/2`，同日修订不再互相覆盖。
+- 验证状态：现有 14 项测试和新增 6 项来源/正文测试分别已通过；两轮真实抓取、JSON 解析、CSV schema、正文不展示、`content==summary`、publisher 非空、Linux 运行路径和 `git diff --check` 均已验证。最后一次合并后的全套测试复跑因 Codex 本地执行额度在 23:16 前受限而未执行，需额度恢复后补跑；这不是测试失败，当前阶段保持未提交。
+
+## 2026-07-11 23:41
+
+- 最终验证补跑：执行额度恢复后完成 `python -m compileall -q src pages scripts tests` 和完整 `unittest discover`；21 项测试全部通过，覆盖原有六维/评估/P0 回归，以及本阶段 RSS 外置配置、publisher 回退、source_weight 算术、正文候选缓存与去重、付费墙禁抓、简报优先 fulltext 证据和 r2/r3 同日快照并存。
+- 当前项目状态：本阶段代码、真实数据、README、DEVLOG 和验证均已完成；按要求保持未提交，暂停等待用户验收。
+
+## 2026-07-11 23:43
+
+- 页面与数据终验：重新运行 `scripts/validate_data_source_extension.py`，确认 20 源、2,535 条 processed、36 条 fulltext/rescored、来源权重误差 `6e-7` 和 r1/r2/r3 快照数量不变；Market Overview 与 Article Explorer 的 Streamlit AppTest 均为 0 异常。Streamlit 仅报告项目原有 `use_container_width` 弃用提醒，不影响本阶段功能。
+
+## 2026-07-12 01:43
+
+- 阶段名称 / 本次操作目标：正文重打分信号稀释修复补丁。正式六维与排序口径恢复为标题+摘要，正文只保留并行评估信号、标签补充和高质量证据句。
+- 正式评分口径：sentiment_score、三类 p_*、Optimism、Fear、Uncertainty 统一由摘要批次计算；全句平均对长文本存在中性稀释，因此正文不再覆盖聚合与排序字段。
+- 正文并行口径：processed schema 新增 sentiment_score_fulltext、p_positive_fulltext、p_neutral_fulltext、p_negative_fulltext，仅供第二阶段“摘要版 vs 正文版”标注评估，不参与排序或聚合。
+- 正文保留价值：证据句优先正文风险句和正文高信号情绪句；风险类别取摘要/正文并集且强度取较大值；主题仅在摘要落入 general market sentiment 兜底时由正文补充细分类，摘要已有具体主题不会被覆盖。
+- 数据迁移：关闭网络抓取，以本地 GPU FinBERT 对 36 篇已缓存正文执行摘要/正文双批次重算；36 篇全部成功，2,535 条 processed 历史记录完整保留。
+- 验证：摘要 |s| 均值从错误正文口径的 0.211250 恢复为 0.470806，与迁移前缓存抓取时分布完全一致；正文并行 |s| 均值保留 0.211250，四个并行列 36/36 完整，34/36 证据句可直接定位到正文。
+
+## 2026-07-12 02:54
+
+- 阶段名称 / 本次操作目标：P1 UI 与展示修复批（9 项）。本阶段由主对话助手 Claude 直接执行（非 Codex）。
+- 具体做了什么：1) 新增 `src/ui_helpers.py::render_sector_heatmap()`，市场总览与板块比较共用：六个维度按方向独立着色（乐观度高=绿、恐惧度/不确定性/分歧度/风险强度高=红反转色阶、关注度用蓝色系中性热度），色阶统一固定 0-100，附配色说明 caption；两页原 px.imshow 单色阶热力图移除。2) 市场总览"数据更新时间"指标卡改为 MM-DD HH:MM 短格式，完整 UTC 时间移入 help 提示。3) 板块比较"板块指标表"统一 1 位小数、新闻数取整、表头汉化并固定列序；六个排名速览表（新增"关注度最高"补足六维）以 2 行 × 3 列布局展示并加中文标题。4) 每日简报卡片顶部新增 st.info 窗口说明：简报所基于的新闻条数（取自 data_snapshot_id）、数据窗口起止、生成时间，并注明与页面实时窗口数字可能不同。5) 板块详情趋势图图例、图例标题、坐标轴标题全部汉化（复用 METRIC_LABELS）；正负新闻表情绪分改 3 位小数格式。6) Top Drivers 理由文案去实现细节：移除"事件分数乘以 1.15"表述，媒体覆盖加成改为"获 N 家媒体共同报道，重要性上调"，理由模板集中在 `src/driver_analysis.py`。7) 文章浏览器两个开关移至页面标题之下的选项行；数值列增加格式配置（0-100 指标 1 位小数、情绪分 3 位、权重 4 位）。8) 乱码项核查结论：存量数据 0 条 U+FFFD、0 条 cp1252 伪码，此前审计所见"It??s"为 GBK 控制台渲染 U+2019 的显示假象，故不执行存量迁移；在 `src/preprocessing.py` 新增 `repair_mojibake()` 并接入 `news_collector.strip_html()` 作为对未来编码异常源的防御。
+- 额外修复（目检发现的连锁 bug）：P0 之后 82% 文章 risk_category 为空，文章浏览器风险筛选用 isin 精确匹配导致空标签文章被静默排除（2478 条只显示 448 条）；重写为集合匹配：risk_category 按分号拆分为标签集，空集归入"无风险"选项，任一选中标签命中即保留。修复后默认全选显示 2478 条。
+- 遇到的问题和解决方案：本机终端为 GBK 编码，直接打印含弯引号文本会 UnicodeEncodeError/显示为乱码，改用 `python -X utf8` 与 ascii() 转义核查，确认数据本身干净。
+- 当前项目状态：compileall 通过；21 项单元测试全部通过；本地 Streamlit 五页逐页目检通过（热力图双页配色、指标卡、排名表标题、简报窗口说明、趋势图例、浏览器布局与筛选计数均符合预期）。本阶段未提交。
+- 下一步计划：等待用户验收；验收后可提交，随后进入整体页面复查与人工标注阶段。
+## 2026-07-12 05:52
+
+- 阶段名称 / 本次操作目标：评估页盲标 CSV 一键下载补丁。把原先需要手动运行 `scripts/sample_for_annotation.py` 的流程接入 Streamlit Evaluation 页面。
+- 页面能力：新增抽样条数和随机种子控件，点击“生成/刷新盲标样本”会复用既有分层抽样逻辑，同步刷新 `annotation_blind.csv` 与私有 `annotation_key.csv`；已有盲标文件时页面直接显示“下载待标注 CSV”按钮。
+- 盲标边界：下载给标注者的 CSV 仍只含 article_id、title、summary、content、url、published_at 和待填标签列；对账 key 放入折叠区并提示不得提供给标注者。
+- 验证：`pages/5_Evaluation.py` 与抽样脚本 py_compile 通过；临时目录烟测生成 5 条样本，盲标列不含任何 predict 字段；`git diff --check -- pages/5_Evaluation.py` 通过。

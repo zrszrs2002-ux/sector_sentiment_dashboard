@@ -166,6 +166,17 @@ class EnhancedMetricTests(unittest.TestCase):
             self.assertEqual(set(legacy["pipeline_revision"]), {"r1"})
             self.assertEqual(set(sector_today["pipeline_revision"]), {PIPELINE_REVISION})
 
+            daily_snapshots._upsert_rows(
+                sector_path,
+                daily_snapshots.SECTOR_SNAPSHOT_FIELDS,
+                [{**sector_today.iloc[0].to_dict(), "pipeline_revision": "r2"}],
+                ["snapshot_date", "data_source", "formula_version", "pipeline_revision", "sector"],
+            )
+            preserved = pd.read_csv(sector_path)
+            preserved_today = preserved[preserved["snapshot_date"].astype(str).eq(today)]
+            self.assertIn("r2", set(preserved_today["pipeline_revision"]))
+            self.assertIn(PIPELINE_REVISION, set(preserved_today["pipeline_revision"]))
+
 
 if __name__ == "__main__":
     unittest.main()

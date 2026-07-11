@@ -28,6 +28,7 @@ from src.config import (
 )
 from src.keyword_signals import matched_signal_terms
 from src.preprocessing import write_csv_atomic
+from src.rss_sources import distinct_value_count
 from src.scoring import formula_values_from_record
 from src.sentiment_model import analyze_articles_sentiment_lexicon
 
@@ -57,7 +58,10 @@ def coverage_summary(df: pd.DataFrame) -> dict[str, int]:
 
     return {
         "新闻数量": int(len(df)),
-        "来源数量": int(df["source"].nunique()) if "source" in df else 0,
+        "来源数量": distinct_value_count(
+            df["publisher"] if "publisher" in df else df.get("source", []),
+            df.get("source", []),
+        ),
         "板块覆盖数量": int(df["sector"].nunique()) if "sector" in df else 0,
         "Unmapped 新闻数量": int((df["sector"].astype(str) == "Unmapped").sum()) if "sector" in df else 0,
         "重复新闻数量": int(df["is_duplicate"].sum()) if "is_duplicate" in df else 0,

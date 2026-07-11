@@ -382,7 +382,11 @@ def _assign_cluster_fields(records: list[dict[str, str]], union_find: UnionFind)
             event_id = f"missing-event-{representative_index}"
         sources: set[str] = set()
         for index in members:
-            sources.update(split_sources(records[index].get("source", "")))
+            sources.update(
+                split_sources(
+                    records[index].get("publisher", "") or records[index].get("source", "")
+                )
+            )
         source_count = str(len(sources))
         for index in members:
             records[index]["event_id"] = event_id

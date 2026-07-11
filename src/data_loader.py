@@ -54,6 +54,7 @@ def _read_articles(data_path: Path) -> pd.DataFrame:
         "model_confidence",
         "relevance_weight",
         "time_weight",
+        "source_weight",
         "agg_weight",
         "dedup_factor",
         "source_count",
@@ -62,6 +63,7 @@ def _read_articles(data_path: Path) -> pd.DataFrame:
         df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0)
 
     df["is_duplicate"] = df["is_duplicate"].astype(str).str.lower().isin(["true", "1", "yes"])
+    df["rescored"] = df["rescored"].astype(str).str.lower().isin(["true", "1", "yes"])
     return df
 
 

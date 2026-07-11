@@ -209,6 +209,7 @@ def score_article(
     collected_at: str,
     relevance_weight: float,
     dedup_factor: float,
+    source_weight: float = 1.0,
     text: str = "",
     weights: WeightGroup | None = None,
     risk_strengths: Mapping[str, float] | None = None,
@@ -224,7 +225,7 @@ def score_article(
     )
     time_weight = calculate_time_weight(published_at, collected_at)
     risk_intensity = calculate_risk_intensity(risk_category, sentiment, risk_strengths)
-    agg_weight = time_weight * relevance_weight * dedup_factor
+    agg_weight = time_weight * relevance_weight * dedup_factor * source_weight
 
     return {
         "p_positive": f"{sentiment.p_positive:.3f}",
@@ -243,5 +244,6 @@ def score_article(
         "model_confidence": f"{sentiment.model_confidence:.3f}",
         "relevance_weight": f"{relevance_weight:.3f}",
         "time_weight": f"{time_weight:.6f}",
+        "source_weight": f"{source_weight:.3f}",
         "agg_weight": f"{agg_weight:.6f}",
     }
