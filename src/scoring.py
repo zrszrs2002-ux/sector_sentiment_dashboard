@@ -19,6 +19,7 @@ from src.config import (
     FORMULA_VERSION_BASELINE,
     FORMULA_VERSION_ENHANCED,
     RISK_NEGATIVE_PRESSURE_WEIGHT,
+    RISK_SEVERITY_SCALE_MAX,
     RISK_SENTIMENT_SEVERITY_WEIGHT,
     RISK_SEVERITY_WEIGHTS,
     RISK_UNCERTAINTY_PRESSURE_WEIGHT,
@@ -172,9 +173,23 @@ def calculate_time_weight(published_at: str, collected_at: str) -> float:
     return math.exp(-age_hours / TIME_DECAY_TAU_HOURS)
 
 
-def calculate_risk_intensity(risk_category: str, sentiment: ArticleSentiment) -> float:
-    severity = RISK_SEVERITY_WEIGHTS.get(risk_category, 3)
-    severity_score = severity / 5 * 100
+def calculate_risk_intensity(
+    risk_category: str,
+    sentiment: ArticleSentiment,
+    risk_strengths: Mapping[str, float] | None = None,
+) -> float:
+    categories = [item.strip() for item in str(risk_category or "").split(";") if item.strip()]
+    strengths = risk_strengths or {}
+    severity_score = 100 * clamp(
+        sum(
+            (RISK_SEVERITY_WEIGHTS[category] / RISK_SEVERITY_SCALE_MAX)
+            * clamp(float(strengths.get(category, 0.0)), 0.0, 1.0)
+            for category in categories
+            if category in RISK_SEVERITY_WEIGHTS
+        ),
+        0.0,
+        1.0,
+    )
     if not RISK_USE_SENTIMENT_PRESSURE:
         return clamp(severity_score)
 
@@ -196,6 +211,7 @@ def score_article(
     dedup_factor: float,
     text: str = "",
     weights: WeightGroup | None = None,
+    risk_strengths: Mapping[str, float] | None = None,
 ) -> dict[str, str]:
     """Generate persisted active metrics plus reusable formula components."""
     components = calculate_formula_components(sentiment, text)
@@ -207,7 +223,7 @@ def score_article(
         weights,
     )
     time_weight = calculate_time_weight(published_at, collected_at)
-    risk_intensity = calculate_risk_intensity(risk_category, sentiment)
+    risk_intensity = calculate_risk_intensity(risk_category, sentiment, risk_strengths)
     agg_weight = time_weight * relevance_weight * dedup_factor
 
     return {

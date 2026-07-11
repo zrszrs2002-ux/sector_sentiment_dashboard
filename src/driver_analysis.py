@@ -84,7 +84,7 @@ def _distinct_source_count(group: pd.DataFrame) -> int:
     if "source_count" in group:
         values = pd.to_numeric(group["source_count"], errors="coerce").fillna(0)
         stored_count = int(values.max()) if not values.empty else 0
-    return max(len(sources), stored_count)
+    return len(sources) if sources else stored_count
 
 
 def collapse_articles_by_event(df: pd.DataFrame) -> pd.DataFrame:

@@ -189,6 +189,11 @@ ATTENTION_GROWTH_LOOKBACK_DAYS = 7
 KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
 DISAGREEMENT_POLARITY_THRESHOLD = 0.15
 
+# TODO: 风险密度与严重度系数均为专家先验，第二冲刺需用人工标注校准。
+# 每类风险强度 r_k = min(命中句子数 / 总句子数 * 3, 1)。
+RISK_KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
+RISK_SEVERITY_SCALE_MAX = 5.0
+
 # 默认关闭情绪/不确定性压力项，避免 Risk Intensity 与 Fear/Uncertainty 维度耦合。
 # 打开后会回到早期 baseline：风险标签严重度 + 负向情绪压力 + 不确定性压力。
 RISK_USE_SENTIMENT_PRESSURE = False
@@ -206,6 +211,9 @@ FINBERT_MAX_LENGTH = 128
 # 事件聚类只折叠展示，不修改 dedup_factor、agg_weight 或六维指标聚合。
 # 独立报道继续贡献 Attention/情绪；是否对簇内文章降权留到第二冲刺用标注数据评估。
 EVENT_TIME_WINDOW_HOURS = 48
+EVENT_MAX_SPAN_HOURS = 72
+# TODO: 极性护栏阈值为首版先验，需结合事件对标注检查误拆与误合并。
+EVENT_POLARITY_GUARD_THRESHOLD = 0.30
 EVENT_SIMILARITY_ENGINE = "embedding"
 EVENT_EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 # TODO: 以下事件相似度阈值是首版先验值，待第二冲刺用人工标注事件对校准。
@@ -217,6 +225,9 @@ EVENT_UNMAPPED_LEXICAL_THRESHOLD = 0.55
 # TODO: 媒体覆盖加成同样需要用 Top Drivers 标注数据校准，当前取保守的 15%。
 EVENT_COVERAGE_BOOST = 1.15
 EVENT_EMBED_BATCH_SIZE = 64
+
+# 数据管线语义修订号；用于解释每日快照趋势中的公式/标签断点。
+PIPELINE_REVISION = "r2"
 
 LLM_ENABLED = True
 # The runtime attempts candidates in order; models.list is logging context only.

@@ -17,6 +17,7 @@ from src.config import (
     FORMULA_VERSION_ENHANCED,
     MARKET_DAILY_SCORES_PATH,
     METRIC_COLUMNS,
+    PIPELINE_REVISION,
     SECTOR_DAILY_SCORES_PATH,
 )
 from src.preprocessing import write_csv_atomic
@@ -27,6 +28,7 @@ SECTOR_SNAPSHOT_FIELDS = [
     "snapshot_timestamp",
     "data_source",
     "formula_version",
+    "pipeline_revision",
     "sector",
     "article_count",
     "attention_volume",
@@ -37,6 +39,7 @@ MARKET_SNAPSHOT_FIELDS = [
     "snapshot_timestamp",
     "data_source",
     "formula_version",
+    "pipeline_revision",
     "article_count",
     *METRIC_COLUMNS,
 ]
@@ -60,6 +63,11 @@ def _mark_legacy_baseline(df: pd.DataFrame) -> pd.DataFrame:
     else:
         versions = marked["formula_version"].fillna("").astype(str).str.strip()
         marked["formula_version"] = versions.where(versions.ne(""), FORMULA_VERSION_BASELINE)
+    if "pipeline_revision" not in marked:
+        marked["pipeline_revision"] = "r1"
+    else:
+        revisions = marked["pipeline_revision"].fillna("").astype(str).str.strip()
+        marked["pipeline_revision"] = revisions.where(revisions.ne(""), "r1")
     if "sector" in marked.columns and "article_count" in marked.columns:
         article_count = pd.to_numeric(marked["article_count"], errors="coerce").fillna(0)
         if "attention_volume" not in marked.columns:
@@ -160,6 +168,7 @@ def write_daily_snapshots(records: list[dict[str, str]], data_source: str) -> di
                     "snapshot_timestamp": snapshot_time,
                     "data_source": data_source,
                     "formula_version": formula_version,
+                    "pipeline_revision": PIPELINE_REVISION,
                     "sector": sector,
                     "article_count": int(row.get("article_count", 0) or 0),
                     "attention_volume": round(float(attention_volume.get(sector, 0.0)), 6),
@@ -173,6 +182,7 @@ def write_daily_snapshots(records: list[dict[str, str]], data_source: str) -> di
                 "snapshot_timestamp": snapshot_time,
                 "data_source": data_source,
                 "formula_version": formula_version,
+                "pipeline_revision": PIPELINE_REVISION,
                 "article_count": int(len(df)),
                 **{
                     metric: round(float(sector_df[metric].mean()), 6)

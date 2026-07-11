@@ -23,6 +23,8 @@ from src.config import (
     EVENT_EMBED_MODEL_NAME,
     EVENT_EMBED_THRESHOLD,
     EVENT_LEXICAL_THRESHOLD,
+    EVENT_MAX_SPAN_HOURS,
+    EVENT_POLARITY_GUARD_THRESHOLD,
     EVENT_SIMILARITY_ENGINE,
     EVENT_TIME_WINDOW_HOURS,
     EVENT_UNMAPPED_EMBED_THRESHOLD,
@@ -88,9 +90,12 @@ class ClusterResult:
 
 
 class UnionFind:
-    def __init__(self, size: int) -> None:
+    def __init__(self, size: int, timestamps: list[float | None] | None = None) -> None:
         self.parent = list(range(size))
         self.rank = [0] * size
+        values = timestamps or [None] * size
+        self.min_timestamp = list(values)
+        self.max_timestamp = list(values)
 
     def find(self, item: int) -> int:
         while self.parent[item] != item:
@@ -98,16 +103,39 @@ class UnionFind:
             item = self.parent[item]
         return item
 
-    def union(self, left: int, right: int) -> None:
+    def union(self, left: int, right: int, max_span_hours: float | None = None) -> bool:
         left_root = self.find(left)
         right_root = self.find(right)
         if left_root == right_root:
-            return
+            return True
+
+        timestamps = [
+            value
+            for value in (
+                self.min_timestamp[left_root],
+                self.max_timestamp[left_root],
+                self.min_timestamp[right_root],
+                self.max_timestamp[right_root],
+            )
+            if value is not None
+        ]
+        merged_min = min(timestamps) if timestamps else None
+        merged_max = max(timestamps) if timestamps else None
+        if (
+            max_span_hours is not None
+            and merged_min is not None
+            and merged_max is not None
+            and merged_max - merged_min > max_span_hours * 3600
+        ):
+            return False
         if self.rank[left_root] < self.rank[right_root]:
             left_root, right_root = right_root, left_root
         self.parent[right_root] = left_root
+        self.min_timestamp[left_root] = merged_min
+        self.max_timestamp[left_root] = merged_max
         if self.rank[left_root] == self.rank[right_root]:
             self.rank[left_root] += 1
+        return True
 
 
 def _clean_text(value: object) -> str:
@@ -246,6 +274,22 @@ def _published_timestamp(record: dict[str, str]) -> float | None:
         return None
 
 
+def _sentiment_score(record: dict[str, str]) -> float:
+    try:
+        return float(record.get("sentiment_score", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _has_polarity_conflict(left: dict[str, str], right: dict[str, str]) -> bool:
+    left_score = _sentiment_score(left)
+    right_score = _sentiment_score(right)
+    threshold = EVENT_POLARITY_GUARD_THRESHOLD
+    return (left_score > threshold and right_score < -threshold) or (
+        right_score > threshold and left_score < -threshold
+    )
+
+
 def _candidate_pairs(
     records: list[dict[str, str]],
     new_indices: set[int] | None,
@@ -311,7 +355,11 @@ def _preunion_existing_events(
         if not event_id:
             continue
         if event_id in first_by_event:
-            union_find.union(first_by_event[event_id], index)
+            union_find.union(
+                first_by_event[event_id],
+                index,
+                max_span_hours=EVENT_MAX_SPAN_HOURS,
+            )
         else:
             first_by_event[event_id] = index
 
@@ -347,7 +395,8 @@ def _cluster_records(
     existing_count: int | None,
 ) -> ClusterResult:
     clustered = [dict(record) for record in records]
-    union_find = UnionFind(len(clustered))
+    timestamps = [_published_timestamp(record) for record in clustered]
+    union_find = UnionFind(len(clustered), timestamps)
     incremental = existing_count is not None
     new_indices = set(range(existing_count or 0, len(clustered))) if incremental else None
     if incremental:
@@ -369,9 +418,11 @@ def _cluster_records(
         device = similarity.device
         fallback_reason = similarity.fallback_reason
         for left, right, strict in candidate_pairs:
+            if _has_polarity_conflict(clustered[left], clustered[right]):
+                continue
             if similarity.index.is_similar(local_index[left], local_index[right], strict=strict):
-                union_find.union(left, right)
-                matched_pair_count += 1
+                if union_find.union(left, right, max_span_hours=EVENT_MAX_SPAN_HOURS):
+                    matched_pair_count += 1
     else:
         print("事件聚类候选对为 0，无需计算文本向量。")
 

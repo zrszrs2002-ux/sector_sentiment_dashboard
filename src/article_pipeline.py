@@ -177,6 +177,7 @@ def enrich_record(record: dict[str, str], sentiment: ArticleSentiment | None = N
         relevance_weight=relevance_weight,
         dedup_factor=float(record.get("dedup_factor") or 1.0),
         text=text,
+        risk_strengths=tag_result.risk_strengths,
     )
 
     evidence_sentence = choose_evidence_sentence(record, tag_result, sentiment)

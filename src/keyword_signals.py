@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
-import re
 from functools import lru_cache
 
 from src.config import DICTIONARY_DIR, KEYWORD_SENTENCE_SCORE_MULTIPLIER
+from src.keyword_matching import (
+    matched_terms_in_sentence,
+    normalize_for_keyword_match,
+    normalized_sentence_hit_score as _normalized_sentence_hit_score,
+)
 from src.sentiment_model import load_sentiment_lexicon
 from src.topic_risk_tagger import split_sentences
 
@@ -44,34 +48,13 @@ def signal_terms() -> dict[str, list[str]]:
     }
 
 
-def normalize_for_keyword_match(text: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", " ", str(text or "").lower())
-    return re.sub(r"\s+", " ", normalized).strip()
-
-
-def matched_terms_in_sentence(sentence: str, terms: list[str]) -> list[str]:
-    haystack = f" {normalize_for_keyword_match(sentence)} "
-    matches: list[str] = []
-    for term in terms:
-        needle = normalize_for_keyword_match(term)
-        if needle and f" {needle} " in haystack:
-            matches.append(term)
-    return matches
-
-
 def normalized_sentence_hit_score(
     sentences: list[str],
     terms: list[str],
     multiplier: float = KEYWORD_SENTENCE_SCORE_MULTIPLIER,
 ) -> float:
     """Return min(hit sentence count / total sentence count * multiplier, 1)."""
-    clean_sentences = [str(sentence).strip() for sentence in sentences if str(sentence).strip()]
-    if not clean_sentences:
-        return 0.0
-    hit_sentence_count = sum(
-        1 for sentence in clean_sentences if matched_terms_in_sentence(sentence, terms)
-    )
-    return min(hit_sentence_count / len(clean_sentences) * multiplier, 1.0)
+    return _normalized_sentence_hit_score(sentences, terms, multiplier)
 
 
 def keyword_signal_components(text: str) -> dict[str, float]:

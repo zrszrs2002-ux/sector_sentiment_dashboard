@@ -15,6 +15,7 @@ from src.config import (
     ENHANCED_WEIGHTS,
     FORMULA_VERSION_BASELINE,
     FORMULA_VERSION_ENHANCED,
+    PIPELINE_REVISION,
 )
 from src.keyword_signals import normalized_sentence_hit_score, signal_terms
 from src.scoring import calculate_article_formula_values, normalized_entropy
@@ -162,6 +163,8 @@ class EnhancedMetricTests(unittest.TestCase):
             )
             legacy = sectors[sectors["snapshot_date"].astype(str).eq("2026-01-01")]
             self.assertEqual(set(legacy["formula_version"]), {FORMULA_VERSION_BASELINE})
+            self.assertEqual(set(legacy["pipeline_revision"]), {"r1"})
+            self.assertEqual(set(sector_today["pipeline_revision"]), {PIPELINE_REVISION})
 
 
 if __name__ == "__main__":

@@ -1,6 +1,28 @@
 {
   "risks": [
-    {"risk_category": "macro risk", "keywords": ["macro", "recession", "slowdown", "inflation", "economic uncertainty"]},
+    {
+      "risk_category": "macro risk",
+      "keywords": [
+        "recession",
+        "recession fears",
+        "stagflation",
+        "economic downturn",
+        "hard landing",
+        "economic contraction",
+        "inflation shock",
+        "macroeconomic shock",
+        "systemic crisis"
+      ],
+      "weak_keywords": [
+        "inflation",
+        "economic slowdown",
+        "economic uncertainty",
+        "rising unemployment",
+        "consumer weakness",
+        "weak growth"
+      ],
+      "min_distinct_hits": 2
+    },
     {"risk_category": "interest rate risk", "keywords": ["interest rate", "yield", "rate pressure", "financing costs", "policy rate"]},
     {"risk_category": "regulatory risk", "keywords": ["regulatory", "regulation", "policy scrutiny", "pricing rules", "rate case"]},
     {"risk_category": "earnings risk", "keywords": ["earnings risk", "guidance", "margin pressure", "revenue risk", "execution"]},

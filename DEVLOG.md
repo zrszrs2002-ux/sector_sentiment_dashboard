@@ -251,3 +251,23 @@
 - 遇到的问题和修复：首次文件级测试发现 Pandas 将 `0/1` 读成整数，旧布尔归一化把整数 0 当作空值；修正为先判断 NaN、再直接字符串化。修复后全部 8 个标准库测试通过。
 - 页面与静态验证：Evaluation 空白冷启动和 30 条已标注完整状态 AppTest 均通过，页面指标显示 FinBERT Accuracy 0.800、Macro F1 0.800、Brier 0.340；`compileall` 与 `git diff --check` 通过。运行时代码未新增 Windows 路径或凭据。
 - 当前项目状态：本阶段实现、正式抽样和验证已完成，尚未提交，等待用户验收确认后按阶段流程提交。
+
+## 2026-07-11 20:55
+
+- 阶段名称 / 本次操作目标：P0 信号质量修复（风险强度失效 + 事件聚类过度合并）。本批只修信号计算、数据与说明，未调整 UI 样式。
+- Risk Intensity：移除未知风险默认严重度和 macro 默认兜底；未命中风险时类别为空、强度为 0。风险标签改为分号存储的多标签，每类复用公共句级关键词密度 `r_k=min(命中句子数/总句子数*3,1)`，文章公式统一为 `100*clip(sum((v_k/5)*r_k),0,1)`。情绪/不确定性压力开关保持默认关闭，严重度上限与密度系数集中到 config 并标注待校准。
+- 词典修复：macro risk 删除 `macro` 等泛化单词，只保留 recession、stagflation、hard landing、inflation shock 等强信号；inflation、economic slowdown、consumer weakness 等弱信号必须同文命中至少 2 个不同词。主题词典新增 AI infrastructure spending、chip supply deal、streaming、EV demand、bank earnings、drug approval、dividend、share buyback、analyst rating、space economy、corporate restructuring 等细分主题。
+- 公共实现：新增 `src/keyword_matching.py`，集中维护边界化关键词匹配、不同命中词去重和句级密度归一化；增强六维组件与风险标签共同调用，避免两套近似公式。新增 `tests/test_signal_quality.py` 覆盖无风险为 0、单个/两个 macro 弱词、多标签精确求和、72 小时链式阻断、极性护栏和分号来源计数。
+- 聚类护栏：config 新增 `EVENT_MAX_SPAN_HOURS=72` 和 `EVENT_POLARITY_GUARD_THRESHOLD=0.30`。并查集在每次合并前检查两簇合并后的最早/最晚发布时间，超过 72 小时拒绝；一正一负跨越阈值的文章在相似度计算前禁止连边。`source_count` 按分号/竖线拆分后去重，Top Drivers 不再用过期持久化计数覆盖当前真实来源数。
+- 快照连续性：新增 `PIPELINE_REVISION="r2"`，板块/市场快照增加 `pipeline_revision`；旧行自动补 `r1`，本次重跑新增 22 条板块 r2 行和 2 条市场 r2 行。README 数据字典说明该字段用于解释趋势中的公式修订断点。
+- 全量重跑：使用本地 CUDA FinBERT 与 CUDA sentence-transformers 对 2,154 条真实新闻完整重跑，处理错误 0。新 Risk Intensity 均值 9.7203、标准差 22.6524，中位数 0、P90 40、范围 0-100；无风险 1,760 条，持久化后一共有 20 个不同取值，不再只有 40/60/80/100 四档。
+- 分布变化：macro risk 从 1,718 条降到 5 条；其余主要类别为 valuation 167、commodity 67、interest rate 64、earnings 51。general market sentiment 从 1,504 条降到 1,028 条；Technology 内从 285 降到 181，降幅约 36.5%，新增 dividend、analyst rating、AI demand、space economy、streaming、AI infrastructure spending 等可解释类别。
+- 聚类结果：事件簇从 1,794 增至 1,818，多篇簇 178 个；最大簇从 26 降到 16，最大时间跨度精确受限为 72 小时，超过 72 小时的簇由 10 个降为 0。Apple/Broadcom 核心合作报道仍形成 16 篇主簇（51.324 小时、Yahoo/CNBC 两个真实来源）；较晚批次按跨度拆为 9 篇和 1 篇。原 Meta 14 篇混合簇拆成 13 篇非强负向簇与 1 篇强负向单篇；13 篇簇的 `source_count=3`，实际来源确为 Yahoo Finance、CNBC、MarketWatch，不是 ticker feed 重复计数。
+- 人工抽查：固定种子 5720 的 5 个多篇簇中，Exxon/Chevron 对比 2 篇、Chevron 技术许可 3 篇、Chevron/Alinta 供气协议 2 篇语义一致；Chevron 4 篇推荐/数据中心叙事和 Microsoft 6 篇成本削减/Copilot/投资/估值叙事仍疑似同公司不同事件误合并。该残余问题需要后续引入簇代表一致性或 complete-link 约束评估，本批按批准范围只实现时间跨度与强极性护栏，未暗调 embedding 阈值。
+- 验证：新增 `scripts/validate_p0_signal_quality.py`，可直接从 Git HEAD 读取 r1 CSV 并与当前 r2 做可重复对比；14 个标准库测试、`compileall`、词典 JSON 解析与 `git diff --check` 全部通过。当前阶段尚未提交，等待用户验收后再按流程提交。
+
+## 2026-07-11 21:11
+
+- 验收与提交：用户确认 P0 信号质量修复验收通过，批准按阶段流程执行 `git add -A` 并以本阶段名称提交。
+- 延期事项 1：Chevron 与 Microsoft 的混叙事簇已登记，complete-link 或簇代表一致性约束留待后续批次，本批不继续修改事件聚类。
+- 延期事项 2：macro risk 词表暂不继续手工调节；待人工标注评估给出 precision/recall，尤其是召回率后，再依据数据调整强弱词和触发门槛。
