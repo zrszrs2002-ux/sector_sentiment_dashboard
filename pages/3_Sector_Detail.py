@@ -24,7 +24,7 @@ def metric_table_from_row(row: pd.Series, value_label: str) -> list[dict[str, fl
 
 
 df, source_mode = load_selected_articles()
-sector_df = sector_metrics(df)
+sector_df = sector_metrics(df, data_source=source_mode)
 
 st.title("板块详情")
 st.caption(f"当前数据源：{source_mode}")

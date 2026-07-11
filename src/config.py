@@ -89,6 +89,47 @@ METRIC_LABELS = {
     "risk_intensity": "风险强度",
 }
 
+FORMULA_VERSION_BASELINE = "baseline"
+FORMULA_VERSION_ENHANCED = "enhanced"
+
+# Baseline 权重组，一键回退时只需改为 ACTIVE_WEIGHTS = BASELINE_WEIGHTS。
+# Optimism/Fear 仅使用 FinBERT 概率；Uncertainty 使用 0.6 neutral + 0.4 entropy；
+# Attention 历史路径仅用新闻量 ECDF；Disagreement 仅用加权标准差；Risk 保持 0.7 mean + 0.3 P90。
+BASELINE_WEIGHTS = {
+    "optimism": {"p_positive": 1.0, "b_bull": 0.0, "g_growth": 0.0},
+    "fear": {"p_negative": 1.0, "b_bear": 0.0, "s_shock": 0.0},
+    "uncertainty": {"p_neutral": 0.6, "entropy_norm": 0.4, "k_unc": 0.0},
+    "attention": {"volume_ecdf": 1.0, "growth_ecdf": 0.0},
+    "disagreement": {"weighted_std": 1.0, "polarity_mix": 0.0},
+    "risk_intensity": {"weighted_mean": 0.7, "p90": 0.3},
+}
+
+# Enhanced 初始权重均为专家先验；TODO: 第二冲刺用标注数据做消融与敏感性校准。
+ENHANCED_WEIGHTS = {
+    "optimism": {"p_positive": 0.7, "b_bull": 0.2, "g_growth": 0.1},
+    "fear": {"p_negative": 0.7, "b_bear": 0.2, "s_shock": 0.1},
+    "uncertainty": {"p_neutral": 0.4, "entropy_norm": 0.3, "k_unc": 0.3},
+    "attention": {"volume_ecdf": 0.7, "growth_ecdf": 0.3},
+    "disagreement": {"weighted_std": 0.5, "polarity_mix": 0.5},
+    "risk_intensity": {"weighted_mean": 0.7, "p90": 0.3},
+}
+
+ACTIVE_WEIGHTS = ENHANCED_WEIGHTS
+ACTIVE_FORMULA_VERSION = (
+    FORMULA_VERSION_BASELINE
+    if ACTIVE_WEIGHTS is BASELINE_WEIGHTS
+    else FORMULA_VERSION_ENHANCED
+)
+
+FORMULA_COMPONENT_COLUMNS = [
+    "b_bull",
+    "b_bear",
+    "g_growth",
+    "s_shock",
+    "k_unc",
+    "entropy_norm",
+]
+
 EXPECTED_ARTICLE_COLUMNS = [
     "article_id",
     "event_id",
@@ -110,6 +151,7 @@ EXPECTED_ARTICLE_COLUMNS = [
     "p_positive",
     "p_neutral",
     "p_negative",
+    *FORMULA_COMPONENT_COLUMNS,
     "optimism",
     "fear",
     "uncertainty",
@@ -135,10 +177,10 @@ TIME_DECAY_TAU_HOURS = 72
 # TODO: 等真实新闻积累出 30 天以上历史后，应切换为每个板块新闻量相对自身历史分布的 ECDF 分位数。
 # TODO: 这样可避免跨板块直接比较新闻量时低估 Utilities、Materials 等天然新闻较少的板块。
 ATTENTION_WINDOW_DAYS = 7
-UNCERTAINTY_NEUTRAL_WEIGHT = 0.6
-UNCERTAINTY_ENTROPY_WEIGHT = 0.4
-RISK_AVG_WEIGHT = 0.7
-RISK_P90_WEIGHT = 0.3
+ATTENTION_MIN_HISTORY_DAYS = 30
+ATTENTION_GROWTH_LOOKBACK_DAYS = 7
+KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
+DISAGREEMENT_POLARITY_THRESHOLD = 0.15
 
 # 默认关闭情绪/不确定性压力项，避免 Risk Intensity 与 Fear/Uncertainty 维度耦合。
 # 打开后会回到早期 baseline：风险标签严重度 + 负向情绪压力 + 不确定性压力。

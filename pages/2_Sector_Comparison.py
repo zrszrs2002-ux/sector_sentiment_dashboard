@@ -8,10 +8,13 @@ from src.ui_helpers import load_selected_articles
 
 
 df, source_mode = load_selected_articles()
-sector_df = sector_metrics(df)
+sector_df = sector_metrics(df, data_source=source_mode)
 
 st.title("板块比较")
-st.caption("比较 11 个板块的六维指标；关注度为近 7 天加权新闻量排名分位数，分歧度为加权情绪标准差。")
+st.caption(
+    "比较 11 个板块的增强版六维指标；关注度在历史不足 30 天时使用横截面排名分位数，"
+    "积累充足后自动切换自身历史 ECDF；分歧度融合加权情绪标准差与正负极性混合度。"
+)
 st.caption(f"当前数据源：{source_mode}")
 
 selected_sectors = st.multiselect(

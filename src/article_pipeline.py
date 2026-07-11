@@ -22,7 +22,11 @@ from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL
 from src.event_clustering import cluster_articles, cluster_articles_incremental
 from src.mapping import map_article
 from src.preprocessing import preprocess_records, read_article_csv, write_article_csv
-from src.scoring import score_article
+from src.scoring import (
+    calculate_article_formula_values,
+    calculate_formula_components_from_probabilities,
+    score_article,
+)
 from src.sentiment_model import ArticleSentiment, analyze_article_sentiment, analyze_articles_sentiment
 from src.topic_risk_tagger import split_sentences, tag_article
 
@@ -172,6 +176,7 @@ def enrich_record(record: dict[str, str], sentiment: ArticleSentiment | None = N
         collected_at=record.get("collected_at", ""),
         relevance_weight=relevance_weight,
         dedup_factor=float(record.get("dedup_factor") or 1.0),
+        text=text,
     )
 
     evidence_sentence = choose_evidence_sentence(record, tag_result, sentiment)
@@ -203,9 +208,15 @@ def error_record(record: dict[str, str], error: Exception) -> dict[str, str]:
             "p_positive": "0.000",
             "p_neutral": "1.000",
             "p_negative": "0.000",
+            "b_bull": "0.000000",
+            "b_bear": "0.000000",
+            "g_growth": "0.000000",
+            "s_shock": "0.000000",
+            "k_unc": "0.000000",
+            "entropy_norm": "0.000000",
             "optimism": "0.0",
             "fear": "0.0",
-            "uncertainty": "100.0",
+            "uncertainty": "40.0",
             "attention": "0.0",
             "attention_weight": "0.0",
             "disagreement": "0.0",
@@ -221,6 +232,38 @@ def error_record(record: dict[str, str], error: Exception) -> dict[str, str]:
         }
     )
     return fallback
+
+
+def upgrade_formula_fields(record: dict[str, str]) -> bool:
+    """Backfill reusable components and ACTIVE scores without rerunning FinBERT."""
+    component_columns = ["b_bull", "b_bear", "g_growth", "s_shock", "k_unc", "entropy_norm"]
+    if all(str(record.get(column, "")).strip() for column in component_columns):
+        return False
+
+    def numeric(name: str) -> float:
+        try:
+            return float(record.get(name, 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    p_positive = numeric("p_positive")
+    p_neutral = numeric("p_neutral")
+    p_negative = numeric("p_negative")
+    components = calculate_formula_components_from_probabilities(
+        p_positive,
+        p_neutral,
+        p_negative,
+        article_text(record),
+    )
+    formula_values = calculate_article_formula_values(
+        p_positive,
+        p_neutral,
+        p_negative,
+        components,
+    )
+    record.update({column: f"{value:.6f}" for column, value in components.items()})
+    record.update({column: f"{value:.1f}" for column, value in formula_values.items()})
+    return True
 
 
 def enrich_records_batch(records: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
@@ -300,6 +343,9 @@ def process_articles_incremental(input_path, output_path, new_raw_records=None) 
     output_path = Path(output_path)
     raw_records = read_article_csv(input_path)
     existing_records = read_article_csv(output_path)
+    upgraded_count = sum(1 for record in existing_records if upgrade_formula_fields(record))
+    if upgraded_count:
+        print(f"公式组件迁移完成：复用现有模型概率，为 {upgraded_count} 条历史新闻补齐 enhanced 组件。")
     processed_ids = {
         str(record.get("article_id", "")).strip()
         for record in existing_records

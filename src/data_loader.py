@@ -7,6 +7,7 @@ from src.config import (
     DATA_DIR,
     DEMO_PROCESSED_ARTICLES_PATH,
     EXPECTED_ARTICLE_COLUMNS,
+    FORMULA_COMPONENT_COLUMNS,
     REAL_PROCESSED_ARTICLES_PATH,
     WORKING_SET_DAYS,
 )
@@ -40,6 +41,7 @@ def _read_articles(data_path: Path) -> pd.DataFrame:
         "p_positive",
         "p_neutral",
         "p_negative",
+        *FORMULA_COMPONENT_COLUMNS,
         "sentiment_score",
         "optimism",
         "fear",

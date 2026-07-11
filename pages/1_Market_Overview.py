@@ -77,8 +77,8 @@ def render_driver_events(drivers: pd.DataFrame) -> None:
 
 
 df, source_mode = load_selected_articles()
-market_scores = market_metrics(df)
-sector_df = sector_metrics(df)
+market_scores = market_metrics(df, data_source=source_mode)
+sector_df = sector_metrics(df, data_source=source_mode)
 latest_brief = read_latest_brief()
 brief_meta = latest_brief.get("metadata", {}) if isinstance(latest_brief.get("metadata"), dict) else {}
 brief_content = str(latest_brief.get("content", "") or "")

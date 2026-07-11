@@ -212,3 +212,19 @@
 - 引擎对比：同批 2,037 条数据用 lexical dry-run 得到 1,996 个簇、多篇簇 29 个、70 篇进入多篇簇（覆盖率 3.44%），比 embedding 多 280 个簇，说明 lexical 明显更保守。清晰的 embedding-only 合并包括 Apple/Broadcom 芯片合作、Microsoft 裁员 4,800 人并重组 Xbox、Tesla Robotaxi 扩展至 Miami；这些标题词面差异较大，lexical 未合并。
 - 人工抽查：使用固定随机种子 5720 抽取 5 个 embedding 多篇簇。SK Hynix 美国上市/与 Micron 差距、Citigroup Q2 财报预览、7-Eleven 起诉 Nike 三簇语义一致；McDonald’s 当日上涨/长期机会/Russell 指数调整，以及 Wix 小盘软件推荐/估值回报两簇属于疑似不同事件误合并。按需求保留 `0.72` 配置值并在 README 标注 TODO，没有为美化结果暗调阈值。
 - 验证：事件/增量/覆盖加成合成数据契约测试通过；`compileall` 通过；Streamlit AppTest 验证 Market Overview 无异常且生成多篇事件展开器，Article Explorer 分组态无异常并包含 `event_id`、`event_article_count`、`source_count`。本阶段尚未提交，等待验收确认。
+
+## 2026-07-11 08:39
+
+- 阶段名称 / 本次操作目标：六维指标增强版计算（PDF 第 6/9.2 节部分 enhanced）
+- 单公式与权重组：`src/scoring.py` 和 `src/aggregation.py` 只保留一套公式实现，调用方通过 `BASELINE_WEIGHTS` / `ENHANCED_WEIGHTS` 传入完整权重组；`ACTIVE_WEIGHTS` 当前指向 enhanced。Baseline 的 Optimism/Fear 为 `1/0/0`，Uncertainty 为 `0.6/0.4/0`，Disagreement 为 `1/0`；Enhanced 对应 `0.7/0.2/0.1`、`0.4/0.3/0.3`、`0.5/0.5`。Risk Intensity 两组仍同为 `0.7*mean + 0.3*P90`，本批未改。
+- 词典与组件：新增 `growth_keywords.json`（33 项）、`shock_keywords.json`（33 项）、`stance_keywords.json`（bullish/bearish 各 20 项）和公共句级归一化函数 `min(命中句数/总句数*3, 1)`。从 University of Notre Dame 的 Loughran-McDonald Master Dictionary 2026-03 版提取 297 个当前有效 Uncertainty 词，与原有 5 项合并去重后共 302 项；README 已补官方来源和 Loughran & McDonald (2011) 引用。
+- 文章级结果保全：processed schema 新增 `b_bull`、`b_bear`、`g_growth`、`s_shock`、`k_unc`、`entropy_norm`。文章级 Optimism/Fear/Uncertainty 使用增强公式写入 ACTIVE 结果；FinBERT 三概率与六个组件同时持久化，因此任意权重组都可由 CSV 纯算术重算，不需要再次运行模型或词典匹配。增量管线遇到旧 processed 记录时会复用已有 FinBERT 概率补齐组件。
+- 板块级增强：Disagreement 改为 `100*(0.5*加权标准差 + 0.5*PolarityMix)`，其中 `PolarityMix=2*min(PosShare,NegShare)`、情绪阈值为 `0.15`，少于 2 条保持 0。Attention 保留 7 天加权新闻量横截面排名冷启动；某板块历史达到 30 天后自动切换自身历史 `0.7*新闻量ECDF + 0.3*增长率ECDF`，并输出中文日志。当前真实历史只有 1 个已完成日，故两套公式均走冷启动路径。
+- 快照双写：`sector_daily_scores.csv` / `market_daily_scores.csv` 新增 `formula_version`；每日分别 upsert baseline/enhanced 两套结果，旧历史行补标 baseline。板块快照同时持久化 `attention_volume`；迁移时旧行用 `article_count` 补齐，不再保留 `nan`。趋势图与简报加载器默认只读取 `ACTIVE_FORMULA_VERSION`。
+- Evaluation 页面：新增 Baseline vs Enhanced 六维均值/标准差/范围表、每维排名变化最大的 3 个板块及组件原因、跨板块的具体新闻两套分数与变化值；输出分布同步加入六个组件字段。正式消融、显著性和敏感性分析仍留到第二冲刺。
+- 真实数据重跑：使用本地 GPU FinBERT 与 CUDA embedding 对 Demo 132 条、真实新闻 2,088 条全量重跑，处理错误 0。真实数据非零组件覆盖：`b_bull=78`、`b_bear=29`、`g_growth=361`、`s_shock=60`、`k_unc=656` 条。
+- 六维 Baseline→Enhanced：板块均值分别为 Optimism `36.49→27.86`、Fear `19.90→14.46`、Uncertainty `48.95→42.57`、Attention `50.00→50.00`、Disagreement `49.64→46.67`、Risk Intensity `75.98→75.98`。范围分别为 Optimism `31.91-40.64→25.03-30.35`、Fear `11.37-27.96→9.17-20.28`、Uncertainty `41.11-54.34→36.67-48.82`、Attention `4.55-95.45` 不变、Disagreement `39.13-61.51→32.74-60.38`、Risk `72.98-77.34` 不变。前三项均值下降主要来自 FinBERT 主概率权重下调，增强组件改变的是相对排序和事件敏感度，不保证所有新闻绝对分数上升。
+- 排名变化：Optimism 最大变化为 Real Estate `9→7`、Healthcare `4→3`、Industrials `3→4`；Fear 为 Financials `6→5`、Consumer Staples `5→6`、Energy 保持第 1；Uncertainty 为 Communication Services `7→3`、Materials `4→8`、Healthcare `5→9`；Disagreement 为 Consumer Staples `9→6`、Consumer Discretionary `5→3`、Industrials `3→5`。Attention 因历史不足 30 天排名不变，Risk 因本批公式不变而排名不变。
+- 方向性抽查：成长样例 `Shopify reinstated...Buy rating...growth outlook` 命中 `growth/expansion/buy rating`，Optimism `55.10→68.57`；`3M...Growth Trends Improving...` 命中 `growth/upside/buy rating`，`35.50→49.85`。冲击样例 `Cramer Just Turned Bearish...` 命中 `crash/bearish`，Fear `43.70→60.59`；`3 AI Chip Stocks to Buy as the Sell-Off Continues` 命中 `sell-off`，`2.10→11.47`。四条净变化方向均符合设计。
+- 验证：新增 5 个标准库回归测试，覆盖文章公式、句级归一化、LM 合并、Disagreement、Risk 不变、旧 Attention 历史兼容和快照双写，全部通过。`compileall`、`git diff --check`、全部词典 JSON 解析通过；真实数据契约确认六个组件均在 0-1、两套板块六维均在 0-100、当天真实快照为 22 个板块行和 2 个市场行。随机 200 条由 CSV 重算 ACTIVE 文章分数最大差异 0.08，仅来自持久化小数位舍入。Streamlit AppTest 验证 Market Overview、Sector Comparison、Sector Detail、Evaluation 无异常，简报/趋势读取到的均为 enhanced 快照。
+- 当前项目状态：本阶段实现与验证完成，尚未提交，等待用户验收确认后按流程执行 `git add -A` 并以本阶段名称提交。

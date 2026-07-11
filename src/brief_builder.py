@@ -241,8 +241,11 @@ def build_brief_payload(df: pd.DataFrame, data_source: str, generated_at: dateti
     snapshot_date = generated_at.date()
     window_df, window_start, window_end = _window_articles(df, generated_at)
 
-    market_scores = {metric: _round_metric(value) for metric, value in market_metrics(window_df).items()}
-    sector_df = sector_metrics(window_df)
+    market_scores = {
+        metric: _round_metric(value)
+        for metric, value in market_metrics(window_df, data_source=data_source).items()
+    }
+    sector_df = sector_metrics(window_df, data_source=data_source)
     previous_market = _previous_market_snapshot(data_source, snapshot_date)
     previous_sector = _previous_sector_snapshots(data_source, snapshot_date)
     macro_df = macro_articles(window_df).sort_values("published_at", ascending=False)
