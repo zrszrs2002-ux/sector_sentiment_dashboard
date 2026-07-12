@@ -6,14 +6,18 @@ import streamlit as st
 from src.config import (
     ANNOTATION_BLIND_PATH,
     ANNOTATION_ERRORS_PATH,
+    ANNOTATION_GUIDE_PATH,
     ANNOTATION_KEY_PATH,
-    ANNOTATION_RANDOM_SEED,
     ANNOTATION_SAMPLE_SIZE,
     CSV_EXPORT_ENCODING,
     RAW_ARTICLES_PATH,
     REAL_PROCESSED_ARTICLES_PATH,
 )
-from scripts.sample_for_annotation import build_annotation_files
+from src.annotation_sampling import (
+    completed_annotation_cells,
+    excel_hyperlink_formula,
+    generate_annotation_samples,
+)
 from src.evaluation import (
     SENTIMENT_LABELS,
     coverage_summary_table,
@@ -32,8 +36,10 @@ def read_csv_file(source) -> pd.DataFrame:
 
 
 def csv_download_bytes(frame: pd.DataFrame) -> bytes:
-    return frame.to_csv(index=False).encode(CSV_EXPORT_ENCODING)
-
+    export = frame.copy()
+    if "url" in export.columns:
+        export["url"] = export["url"].map(excel_hyperlink_formula)
+    return export.to_csv(index=False).encode(CSV_EXPORT_ENCODING)
 
 def render_confusion_matrix(matrix: pd.DataFrame, title: str) -> None:
     figure = px.imshow(
@@ -91,68 +97,62 @@ st.caption(f"当前数据源：{source_mode}")
 st.caption("上方分类评估固定读取 annotation 文件；当前数据源只影响页面底部的数据诊断区块。")
 
 st.subheader("人工标注评估")
+st.markdown("### 步骤 1：获取盲标样本")
 st.caption(
-    "可直接在页面生成并下载待标注的 annotation_blind.csv；"
-    "annotation_key.csv 会同步保存，仅供本页后台对账，不提供给标注者。"
+    "点击按钮后才会按 sector × FinBERT 情绪分层抽取固定的 300 条样本；"
+    "页面加载或交互重跑不会自动重抽。"
 )
 
-st.markdown("**盲标样本生成与下载**")
-sample_col1, sample_col2, sample_col3 = st.columns([0.9, 0.9, 1.4])
-sample_size = sample_col1.number_input(
-    "抽样条数",
-    min_value=1,
-    max_value=5000,
-    value=ANNOTATION_SAMPLE_SIZE,
-    step=50,
-)
-sample_seed = sample_col2.number_input(
-    "随机种子",
-    min_value=0,
-    max_value=999999999,
-    value=ANNOTATION_RANDOM_SEED,
-    step=1,
-)
-sample_col3.caption(
-    "重新生成会刷新 data/annotation 下的盲标文件和对账 key；"
-    "已有标注进行中时，请先下载当前版本留档。"
-)
 
-generated_blind = st.session_state.get("generated_annotation_blind")
-generated_key = st.session_state.get("generated_annotation_key")
-if st.button("生成/刷新盲标样本", type="primary"):
+existing_blind = pd.DataFrame()
+completed_cells = 0
+if ANNOTATION_BLIND_PATH.exists():
     try:
-        generated_blind, generated_key = build_annotation_files(
+        existing_blind = read_csv_file(ANNOTATION_BLIND_PATH)
+        completed_cells = completed_annotation_cells(existing_blind)
+    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
+        st.warning(f"现有盲标文件读取失败，暂不提供重抽样：{exc}")
+
+replacement_confirmed = True
+if completed_cells:
+    st.warning(
+        f"当前 annotation_blind.csv 已有 {completed_cells} 个已填写标注。"
+        "重新生成会替换该文件和私有对账 key；现有安全写入机制会先保留备份。"
+    )
+    replacement_confirmed = st.checkbox(
+        f"我确认放弃已填写的 {completed_cells} 个标注并重新抽样",
+        key="confirm_annotation_resample",
+    )
+else:
+    st.caption("当前没有已填写标签，可直接生成或刷新空白盲标样本。")
+
+if st.button(
+    f"生成 {ANNOTATION_SAMPLE_SIZE} 条盲标样本",
+    type="primary",
+    disabled=not replacement_confirmed,
+):
+    try:
+        generated_blind, _ = generate_annotation_samples(
             RAW_ARTICLES_PATH,
             REAL_PROCESSED_ARTICLES_PATH,
             ANNOTATION_BLIND_PATH.parent,
-            sample_size=int(sample_size),
-            seed=int(sample_seed),
         )
     except (FileNotFoundError, OSError, UnicodeDecodeError, ValueError, pd.errors.ParserError) as exc:
         st.error(f"盲标样本生成失败：{exc}")
     else:
         st.session_state["generated_annotation_blind"] = generated_blind
-        st.session_state["generated_annotation_key"] = generated_key
+        existing_blind = generated_blind
+        completed_cells = 0
         st.success(
-            f"已生成 {len(generated_blind)} 条盲标样本，并同步刷新 annotation_key.csv。"
+            f"已生成 {len(generated_blind)} 条盲标样本并写入 data/annotation/。"
         )
 
-download_blind = generated_blind
-download_key = generated_key
-if download_blind is None and ANNOTATION_BLIND_PATH.exists():
-    try:
-        download_blind = read_csv_file(ANNOTATION_BLIND_PATH)
-    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
-        st.warning(f"当前盲标文件读取失败，暂不能下载：{exc}")
-if download_key is None and ANNOTATION_KEY_PATH.exists():
-    try:
-        download_key = read_csv_file(ANNOTATION_KEY_PATH)
-    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
-        st.warning(f"当前对账 key 读取失败：{exc}")
+session_blind = st.session_state.get("generated_annotation_blind")
+download_blind = session_blind if isinstance(session_blind, pd.DataFrame) else existing_blind
 
-download_col1, download_col2 = st.columns([1, 1])
-with download_col1:
-    if isinstance(download_blind, pd.DataFrame) and not download_blind.empty:
+download_col, guide_col = st.columns(2)
+with download_col:
+    if not download_blind.empty:
         st.download_button(
             "下载待标注 CSV",
             data=csv_download_bytes(download_blind),
@@ -163,25 +163,32 @@ with download_col1:
         st.caption(f"当前可下载 {len(download_blind)} 条盲标样本。")
     else:
         st.info("尚无盲标样本，请先点击上方按钮生成。")
-with download_col2:
-    with st.expander("内部对账 key 下载"):
-        st.warning("annotation_key.csv 含模型预测列，只能由评估者保存，不能给标注者。")
-        if isinstance(download_key, pd.DataFrame) and not download_key.empty:
-            st.download_button(
-                "下载 annotation_key.csv",
-                data=csv_download_bytes(download_key),
-                file_name="annotation_key.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-        else:
-            st.info("暂无可下载的对账 key。")
+with guide_col:
+    if ANNOTATION_GUIDE_PATH.exists():
+        st.download_button(
+            "下载标注手册",
+            data=ANNOTATION_GUIDE_PATH.read_bytes(),
+            file_name="annotation_guide.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+    else:
+        st.warning("未找到 docs/annotation_guide.md。")
+st.caption("annotation_key.csv 仅供后台对账，基于盲标原则，页面不提供下载入口。")
+st.markdown("### 步骤 2：离线填写")
+st.markdown(
+    "- `label_sentiment` 仅填 `positive`、`neutral` 或 `negative`。\n"
+    "- `label_sector_ok` 填 `1`（归属正确）或 `0`（归属错误）；不确定可留空。\n"
+    "- `label_risk_categories` 可填多个英文风险标签并用 `;` 分隔；无明确风险填 `none`。\n"
+    "- `label_evidence_ok` 填 `1` 或 `0`；边界判断和理由写入 `notes`。"
+)
+
+st.markdown("### 步骤 3：上传与结果")
 
 uploaded_file = st.file_uploader(
     "上传已填写的 annotation_blind.csv（留空则读取 data/annotation/annotation_blind.csv）",
     type=["csv"],
 )
-
 annotations = pd.DataFrame()
 annotation_key = pd.DataFrame()
 if uploaded_file is not None:

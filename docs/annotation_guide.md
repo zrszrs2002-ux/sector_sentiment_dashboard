@@ -4,6 +4,7 @@
 
 ## 1. 字段填写
 
+- `url`：只读。在 Excel 中显示为“打开原文”链接，点击即可在浏览器打开对应新闻。
 - `label_sentiment`：只填 `positive`、`neutral`、`negative`。
 - `label_sector_ok`：第二遍对账字段。模型板块归属正确填 `1`，错误填 `0`；无法判断留空并在 `notes` 说明。
 - `label_risk_categories`：可多选，使用下表英文标签，以半角分号 `;` 分隔；没有明确风险填 `none`。

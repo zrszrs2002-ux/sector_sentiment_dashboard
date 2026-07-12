@@ -142,6 +142,7 @@ class ModelEvaluationTests(unittest.TestCase):
 
             self.assertEqual(list(blind.columns), BLIND_FIELDS)
             self.assertFalse(any("predict" in column.lower() for column in blind.columns))
+            self.assertTrue(blind["url"].str.startswith('=HYPERLINK("https://example.com/').all())
             self.assertEqual(len(blind), 24)
             self.assertEqual(len(private_key), 24)
             self.assertTrue((output_dir / "annotation_blind.csv").exists())

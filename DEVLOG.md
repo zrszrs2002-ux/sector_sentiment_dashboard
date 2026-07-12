@@ -318,3 +318,15 @@
 - 页面能力：新增抽样条数和随机种子控件，点击“生成/刷新盲标样本”会复用既有分层抽样逻辑，同步刷新 `annotation_blind.csv` 与私有 `annotation_key.csv`；已有盲标文件时页面直接显示“下载待标注 CSV”按钮。
 - 盲标边界：下载给标注者的 CSV 仍只含 article_id、title、summary、content、url、published_at 和待填标签列；对账 key 放入折叠区并提示不得提供给标注者。
 - 验证：`pages/5_Evaluation.py` 与抽样脚本 py_compile 通过；临时目录烟测生成 5 条样本，盲标列不含任何 predict 字段；`git diff --check -- pages/5_Evaluation.py` 通过。
+
+## 2026-07-12 19:55
+
+- 阶段名称 / 本次操作目标：评估页标注流程页面化（去掉命令行步骤）。
+- 抽样内核：新增 `src/annotation_sampling.py`，将分层抽样、盲标/私有 key 安全写入和已填写标签计数收敛为可复用函数；`scripts/sample_for_annotation.py` 保留为调用相同内核的命令行薄壳。`config.py` 新增固定的 `ANNOTATION_SAMPLE_SEED = 5720`，保留旧常量别名以兼容已有调用。
+- 页面流程：`pages/5_Evaluation.py` 改为“获取盲标样本 → 离线填写 → 上传与结果”三步布局。仅点击“生成 300 条盲标样本”才会生成文件；下载采用 UTF-8-SIG。页面同时提供标注手册下载，明确 `annotation_key.csv` 仅供后台对账且不再提供任何下载入口。
+- 重抽样护栏：检测到四类标签列已有填写时，显示已填写单元格数与备份提示；必须勾选“我确认放弃...”后生成按钮才解除禁用。`notes` 不计入已填写标注数。
+- 验证：`py_compile` 通过；真实页面 AppTest 0 异常且页面加载前后 `annotation_blind.csv` 修改时间不变；隔离 AppTest 中 3 个已填标签时按钮初始禁用、勾选后解锁；临时 3 条假标注可得 3 条情绪评估、三方对比与混淆矩阵输入；21 项单元测试全部通过。
+## 2026-07-12 20:10
+
+- 小补丁：盲标 CSV 的 `url` 列支持 Excel 一键跳转。`src/annotation_sampling.py` 对 HTTP/HTTPS URL 生成 `HYPERLINK()` 公式，显示“打开原文”；空值、非 URL 值和已格式化公式保持原样。`pages/5_Evaluation.py` 的下载路径也会执行同一格式化，因此已存在的旧盲标样本无需重新抽样即可下载为可点击链接。
+- 文档与验证：标注手册补充 `url` 只读及点击说明；抽样契约测试新增超链接断言。已验证公式 Unicode 显示文本为“打开原文”、重复格式化不嵌套、页面 AppTest 0 异常并仍显示盲标 CSV/手册两个下载入口。
