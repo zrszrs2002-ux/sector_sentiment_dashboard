@@ -9,7 +9,6 @@ import pandas as pd
 
 from src.aggregation import (
     attention_history_day_counts,
-    polarity_mix,
     safe_weights,
     sector_metrics,
     weighted_mean,
@@ -250,10 +249,7 @@ def _component_means(df: pd.DataFrame) -> dict[str, dict[str, float]]:
                 else pd.Series(0.0, index=group.index)
             )
             result[str(sector)][component] = weighted_mean(values, weights)
-        result[str(sector)]["polarity_mix"] = polarity_mix(
-            group.get("sentiment_score", pd.Series(0.0, index=group.index)),
-            weights,
-        )
+
     return result
 
 
@@ -291,7 +287,7 @@ def _rank_change_reason(
             return f"历史 {days} 天，未达 {ATTENTION_MIN_HISTORY_DAYS} 天；两组均使用冷启动排名"
         return f"历史 {days} 天；Enhanced 在自身历史 ECDF 中加入 30% 新闻量增长率"
     if metric == "disagreement":
-        return f"Enhanced 加入 50% 正负极性混合度（PolarityMix={values.get('polarity_mix', 0):.2f}）"
+        return "默认使用无阈值的加权成对情绪距离；旧式 PolarityMix 仅保留作消融开关"
     return "Risk Intensity 本批两组权重相同，公式与排名不变"
 
 

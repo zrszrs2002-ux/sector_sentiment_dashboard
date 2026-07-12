@@ -31,6 +31,8 @@ SECTOR_SNAPSHOT_FIELDS = [
     "pipeline_revision",
     "sector",
     "article_count",
+    "event_count",
+    "publisher_count",
     "attention_volume",
     *METRIC_COLUMNS,
 ]
@@ -172,6 +174,8 @@ def write_daily_snapshots(records: list[dict[str, str]], data_source: str) -> di
                     "pipeline_revision": PIPELINE_REVISION,
                     "sector": sector,
                     "article_count": int(row.get("article_count", 0) or 0),
+                    "event_count": int(row.get("event_count", 0) or 0),
+                    "publisher_count": int(row.get("publisher_count", 0) or 0),
                     "attention_volume": round(float(attention_volume.get(sector, 0.0)), 6),
                     **{metric: round(float(row.get(metric, 0) or 0), 6) for metric in METRIC_COLUMNS},
                 }

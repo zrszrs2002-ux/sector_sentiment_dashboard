@@ -37,14 +37,17 @@ def _load_json(path_name: str) -> dict[str, list[str]]:
 def signal_terms() -> dict[str, list[str]]:
     stance = _load_json("stance_keywords.json")
     growth = _load_json("growth_keywords.json")
-    shock = _load_json("shock_keywords.json")
+    panic = _load_json("panic_keywords.json")
+    blockers = _load_json("positive_direction_blockers.json")
     uncertainty = load_sentiment_lexicon().get("uncertainty", [])
     return {
         "b_bull": stance.get("bullish", []),
         "b_bear": stance.get("bearish", []),
         "g_growth": growth.get("growth", []),
-        "s_shock": shock.get("shock", []),
+        # 保留 schema 字段名 s_shock；实际只使用市场恐慌/避险反应词。
+        "s_shock": panic.get("panic", []),
         "k_unc": [str(term).strip().lower() for term in uncertainty if str(term).strip()],
+        "positive_blockers": blockers.get("blockers", []),
     }
 
 
@@ -60,8 +63,14 @@ def normalized_sentence_hit_score(
 def keyword_signal_components(text: str) -> dict[str, float]:
     sentences = split_sentences(text)
     terms_by_signal = signal_terms()
+    blockers = terms_by_signal.get("positive_blockers", [])
     return {
-        signal: normalized_sentence_hit_score(sentences, terms_by_signal.get(signal, []))
+        signal: _normalized_sentence_hit_score(
+            sentences,
+            terms_by_signal.get(signal, []),
+            KEYWORD_SENTENCE_SCORE_MULTIPLIER,
+            blockers if signal in {"b_bull", "g_growth"} else None,
+        )
         for signal in SIGNAL_KEYS
     }
 
@@ -70,10 +79,13 @@ def matched_signal_terms(text: str) -> dict[str, list[str]]:
     sentences = split_sentences(text)
     terms_by_signal = signal_terms()
     result: dict[str, list[str]] = {}
+    blockers = terms_by_signal.get("positive_blockers", [])
     for signal in SIGNAL_KEYS:
         matches: list[str] = []
         seen: set[str] = set()
         for sentence in sentences:
+            if signal in {"b_bull", "g_growth"} and matched_terms_in_sentence(sentence, blockers):
+                continue
             for term in matched_terms_in_sentence(sentence, terms_by_signal.get(signal, [])):
                 if term not in seen:
                     seen.add(term)

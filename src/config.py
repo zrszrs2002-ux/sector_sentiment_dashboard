@@ -216,12 +216,20 @@ ATTENTION_WINDOW_DAYS = 7
 ATTENTION_MIN_HISTORY_DAYS = 30
 ATTENTION_GROWTH_LOOKBACK_DAYS = 7
 KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
+# Fear 技术定义仅表示下行/避险压力：S_shock 使用 panic 反应词，不再把违约、调查、衰退等事件风险重复计入 Fear。
+# 事件风险严重度由 Risk Intensity 独立承载。
+# TODO: 成对距离归一化系数是首版先验，需用人工标注校准。
+DISAGREEMENT_METHOD = "pairwise_distance"  # "legacy_std_mix" 供消融使用。
+DISAGREEMENT_PAIRWISE_NORMALIZATION = 2.0
+# 仅 legacy_std_mix 使用；默认公式没有情绪极性阈值。
 DISAGREEMENT_POLARITY_THRESHOLD = 0.15
 
 # TODO: 风险密度与严重度系数均为专家先验，第二冲刺需用人工标注校准。
 # 每类风险强度 r_k = min(命中句子数 / 总句子数 * 3, 1)。
 RISK_KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
 RISK_SEVERITY_SCALE_MAX = 5.0
+# 有界风险联合方式：noisy_or 避免多标签线性相加过早饱和；sum 保留作旧式消融对照。
+RISK_COMBINE = "noisy_or"  # "sum"
 
 # 默认关闭情绪/不确定性压力项，避免 Risk Intensity 与 Fear/Uncertainty 维度耦合。
 # 打开后会回到早期 baseline：风险标签严重度 + 负向情绪压力 + 不确定性压力。
@@ -256,7 +264,7 @@ EVENT_COVERAGE_BOOST = 1.15
 EVENT_EMBED_BATCH_SIZE = 64
 
 # 数据管线语义修订号；用于解释每日快照趋势中的公式/标签断点。
-PIPELINE_REVISION = "r3"
+PIPELINE_REVISION = "r4"
 
 LLM_ENABLED = True
 # The runtime attempts candidates in order; models.list is logging context only.

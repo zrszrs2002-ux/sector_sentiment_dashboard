@@ -36,12 +36,17 @@ def normalized_sentence_hit_score(
     sentences: list[str],
     terms: list[str],
     multiplier: float,
+    blocked_terms: list[str] | None = None,
 ) -> float:
-    """Return min(hit sentence count / total sentence count * multiplier, 1)."""
+    """Return a sentence-hit score, optionally excluding direction-reversed hits."""
     clean_sentences = [str(sentence).strip() for sentence in sentences if str(sentence).strip()]
     if not clean_sentences:
         return 0.0
+    blockers = blocked_terms or []
     hit_sentence_count = sum(
-        1 for sentence in clean_sentences if matched_terms_in_sentence(sentence, terms)
+        1
+        for sentence in clean_sentences
+        if matched_terms_in_sentence(sentence, terms)
+        and not matched_terms_in_sentence(sentence, blockers)
     )
     return min(hit_sentence_count / len(clean_sentences) * multiplier, 1.0)

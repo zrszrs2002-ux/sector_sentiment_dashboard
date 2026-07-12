@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -71,13 +72,15 @@ class SignalQualityTests(unittest.TestCase):
         self.assertIn("macro risk", tagged.risk_category.split(";"))
         self.assertGreater(tagged.risk_strengths["macro risk"], 0)
 
-    def test_multilabel_risk_formula_sums_density_weighted_severity(self) -> None:
-        score = calculate_risk_intensity(
+    def test_multilabel_risk_formula_noisy_or_and_legacy_sum(self) -> None:
+        arguments = (
             "liquidity risk;regulatory risk",
             sentiment(),
             {"liquidity risk": 0.5, "regulatory risk": 0.25},
         )
-        self.assertAlmostEqual(score, 70.0)
+        self.assertAlmostEqual(calculate_risk_intensity(*arguments), 60.0)
+        with patch("src.scoring.RISK_COMBINE", "sum"):
+            self.assertAlmostEqual(calculate_risk_intensity(*arguments), 70.0)
 
     def test_cluster_span_breaks_transitive_chain(self) -> None:
         records = [event_record("a", 0), event_record("b", 40), event_record("c", 80)]

@@ -17,8 +17,9 @@ from src.config import (
     FORMULA_VERSION_ENHANCED,
     PIPELINE_REVISION,
 )
-from src.keyword_signals import normalized_sentence_hit_score, signal_terms
+from src.keyword_signals import keyword_signal_components, normalized_sentence_hit_score, signal_terms
 from src.scoring import calculate_article_formula_values, normalized_entropy
+from src.ui_helpers import heatmap_color_values
 
 
 class EnhancedMetricTests(unittest.TestCase):
@@ -86,17 +87,55 @@ class EnhancedMetricTests(unittest.TestCase):
         self.assertAlmostEqual(score, 0.75)
         self.assertGreaterEqual(len(signal_terms()["k_unc"]), 297)
 
-    def test_disagreement_enhancement_and_risk_stability(self) -> None:
+    def test_pairwise_disagreement_and_legacy_switch(self) -> None:
         baseline = sector_metrics(self.articles, BASELINE_WEIGHTS)
         enhanced = sector_metrics(self.articles, ENHANCED_WEIGHTS)
         baseline_row = baseline[baseline["sector"].eq("Technology")].iloc[0]
         enhanced_row = enhanced[enhanced["sector"].eq("Technology")].iloc[0]
         self.assertAlmostEqual(float(baseline_row["disagreement"]), 50.0)
-        self.assertAlmostEqual(float(enhanced_row["disagreement"]), 75.0)
+        self.assertAlmostEqual(float(enhanced_row["disagreement"]), 50.0)
+        with patch("src.aggregation.DISAGREEMENT_METHOD", "legacy_std_mix"):
+            legacy = sector_metrics(self.articles, ENHANCED_WEIGHTS)
+        legacy_row = legacy[legacy["sector"].eq("Technology")].iloc[0]
+        self.assertAlmostEqual(float(legacy_row["disagreement"]), 75.0)
         self.assertAlmostEqual(
             float(baseline_row["risk_intensity"]),
             float(enhanced_row["risk_intensity"]),
         )
+
+    def test_event_risk_representatives_and_weighted_p90(self) -> None:
+        now = pd.Timestamp.now(tz="UTC")
+        records = [
+            {**self.articles.iloc[0].to_dict(), "article_id": "event-a-main", "event_id": "event-a", "risk_intensity": 100.0, "agg_weight": 1.0},
+            {**self.articles.iloc[0].to_dict(), "article_id": "event-a-repeat", "event_id": "event-a", "risk_intensity": 0.0, "agg_weight": 0.1},
+            {**self.articles.iloc[0].to_dict(), "article_id": "event-b", "event_id": "event-b", "risk_intensity": 50.0, "agg_weight": 1.0},
+            {**self.articles.iloc[0].to_dict(), "article_id": "event-c", "event_id": "event-c", "risk_intensity": 0.0, "agg_weight": 1.0},
+        ]
+        for record in records:
+            record["published_at"] = now
+            record["collected_at"] = now
+            record["publisher"] = record["article_id"]
+        metrics = sector_metrics(pd.DataFrame(records), ENHANCED_WEIGHTS)
+        row = metrics[metrics["sector"].eq("Technology")].iloc[0]
+        self.assertEqual(int(row["article_count"]), 4)
+        self.assertEqual(int(row["event_count"]), 3)
+        self.assertEqual(int(row["publisher_count"]), 4)
+        self.assertAlmostEqual(float(row["risk_intensity"]), 65.0)
+
+    def test_direction_gate_panic_terms_and_relative_heatmap_scale(self) -> None:
+        signal_terms.cache_clear()
+        blocked_growth = keyword_signal_components("Revenue growth slows as demand turns weak.")
+        blocked_bull = keyword_signal_components("The buy rating remains, but the outlook is cut.")
+        panic = keyword_signal_components("Investor anxiety triggered a flight to safety and risk-off trading.")
+        positive = keyword_signal_components("Strong demand and a buy rating support growth.")
+        self.assertEqual(blocked_growth["g_growth"], 0.0)
+        self.assertEqual(blocked_bull["b_bull"], 0.0)
+        self.assertGreater(panic["s_shock"], 0.0)
+        self.assertGreater(positive["g_growth"], 0.0)
+        relative = heatmap_color_values(pd.Series([20.0, 21.0, 22.0]))
+        absolute = heatmap_color_values(pd.Series([20.0, 21.0, 22.0]), "absolute")
+        self.assertEqual(relative.tolist(), [0.0, 50.0, 100.0])
+        self.assertEqual(absolute.tolist(), [20.0, 21.0, 22.0])
 
     def test_attention_switch_accepts_legacy_history(self) -> None:
         now = pd.Timestamp.now(tz="UTC")
@@ -164,7 +203,12 @@ class EnhancedMetricTests(unittest.TestCase):
             legacy = sectors[sectors["snapshot_date"].astype(str).eq("2026-01-01")]
             self.assertEqual(set(legacy["formula_version"]), {FORMULA_VERSION_BASELINE})
             self.assertEqual(set(legacy["pipeline_revision"]), {"r1"})
+            self.assertTrue(legacy["event_count"].isna().all())
+            self.assertTrue(legacy["publisher_count"].isna().all())
             self.assertEqual(set(sector_today["pipeline_revision"]), {PIPELINE_REVISION})
+            technology_today = sector_today[sector_today["sector"].astype(str).eq("Technology")]
+            self.assertTrue((pd.to_numeric(technology_today["event_count"], errors="coerce") > 0).all())
+            self.assertTrue((pd.to_numeric(technology_today["publisher_count"], errors="coerce") > 0).all())
 
             daily_snapshots._upsert_rows(
                 sector_path,

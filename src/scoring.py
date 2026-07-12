@@ -18,6 +18,7 @@ from src.config import (
     FORMULA_COMPONENT_COLUMNS,
     FORMULA_VERSION_BASELINE,
     FORMULA_VERSION_ENHANCED,
+    RISK_COMBINE,
     RISK_NEGATIVE_PRESSURE_WEIGHT,
     RISK_SEVERITY_SCALE_MAX,
     RISK_SENTIMENT_SEVERITY_WEIGHT,
@@ -180,16 +181,19 @@ def calculate_risk_intensity(
 ) -> float:
     categories = [item.strip() for item in str(risk_category or "").split(";") if item.strip()]
     strengths = risk_strengths or {}
-    severity_score = 100 * clamp(
-        sum(
-            (RISK_SEVERITY_WEIGHTS[category] / RISK_SEVERITY_SCALE_MAX)
-            * clamp(float(strengths.get(category, 0.0)), 0.0, 1.0)
-            for category in categories
-            if category in RISK_SEVERITY_WEIGHTS
-        ),
-        0.0,
-        1.0,
-    )
+    risk_probabilities = [
+        (RISK_SEVERITY_WEIGHTS[category] / RISK_SEVERITY_SCALE_MAX)
+        * clamp(float(strengths.get(category, 0.0)), 0.0, 1.0)
+        for category in categories
+        if category in RISK_SEVERITY_WEIGHTS
+    ]
+    if RISK_COMBINE == "sum":
+        combined_risk = clamp(sum(risk_probabilities), 0.0, 1.0)
+    elif RISK_COMBINE == "noisy_or":
+        combined_risk = 1.0 - math.prod(1.0 - probability for probability in risk_probabilities)
+    else:
+        raise ValueError(f"不支持的 RISK_COMBINE：{RISK_COMBINE}")
+    severity_score = 100 * combined_risk
     if not RISK_USE_SENTIMENT_PRESSURE:
         return clamp(severity_score)
 

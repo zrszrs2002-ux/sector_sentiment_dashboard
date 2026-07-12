@@ -167,7 +167,16 @@ with right_col:
             st.info("暂无 latest_brief.md。抓取管线会在每日生成时刻后自动生成；也可以在侧边栏手动确认重新生成。")
 
 st.subheader("Sector Heatmap")
-render_sector_heatmap(sector_df)
+heatmap_mode = st.radio(
+    "热力图上色模式",
+    options=["横截面相对", "绝对 0-100 定标"],
+    horizontal=True,
+    key="market_heatmap_color_mode",
+)
+render_sector_heatmap(
+    sector_df,
+    color_mode="relative" if heatmap_mode == "横截面相对" else "absolute",
+)
 
 driver_title = st.empty()
 driver_window_mode = st.radio(

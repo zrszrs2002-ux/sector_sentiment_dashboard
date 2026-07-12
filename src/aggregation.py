@@ -8,6 +8,8 @@ from src.config import (
     ATTENTION_GROWTH_LOOKBACK_DAYS,
     ATTENTION_MIN_HISTORY_DAYS,
     ATTENTION_WINDOW_DAYS,
+    DISAGREEMENT_METHOD,
+    DISAGREEMENT_PAIRWISE_NORMALIZATION,
     DISAGREEMENT_POLARITY_THRESHOLD,
     METRIC_COLUMNS,
     SECTOR_DAILY_SCORES_PATH,
@@ -53,6 +55,111 @@ def weighted_std(values: pd.Series, weights: pd.Series) -> float:
     mean_value = weighted_mean(clean_values, clean_weights)
     variance = float((clean_weights * (clean_values - mean_value) ** 2).sum() / total_weight)
     return float(np.sqrt(max(variance, 0.0)))
+
+
+def weighted_quantile(values: pd.Series, weights: pd.Series, quantile: float) -> float:
+    """Return a right-continuous weighted quantile with safe equal-weight fallback."""
+    clean_values = pd.to_numeric(values, errors="coerce").fillna(0)
+    if clean_values.empty:
+        return 0.0
+    clean_weights = weights.reindex(clean_values.index).fillna(0).clip(lower=0)
+    if float(clean_weights.sum()) <= 0:
+        return float(clean_values.quantile(quantile))
+    ordered = pd.DataFrame({"value": clean_values, "weight": clean_weights}).sort_values("value")
+    target = float(np.clip(quantile, 0.0, 1.0)) * float(ordered["weight"].sum())
+    position = int(np.searchsorted(ordered["weight"].cumsum().to_numpy(), target, side="left"))
+    return float(ordered.iloc[min(position, len(ordered) - 1)]["value"])
+
+
+def event_representatives(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep one highest-aggregation-weight article per event for event-level risk."""
+    if df.empty:
+        return df.copy()
+    working = df.copy()
+    fallback = (
+        working["article_id"].fillna("").astype(str)
+        if "article_id" in working
+        else pd.Series([f"row-{index}" for index in working.index], index=working.index)
+    )
+    if "event_id" in working:
+        event_ids = working["event_id"].fillna("").astype(str).str.strip()
+        working["_event_key"] = event_ids.where(event_ids.ne(""), fallback)
+    else:
+        working["_event_key"] = fallback
+    working["_event_weight"] = safe_weights(working)
+    working["_event_article_id"] = fallback
+    representatives = working.sort_values(
+        ["_event_key", "_event_weight", "_event_article_id"],
+        ascending=[True, False, True],
+        kind="stable",
+    ).drop_duplicates("_event_key", keep="first")
+    return representatives.drop(
+        columns=["_event_key", "_event_weight", "_event_article_id"],
+        errors="ignore",
+    ).reset_index(drop=True)
+
+
+def distinct_publisher_count(df: pd.DataFrame) -> int:
+    publishers: set[str] = set()
+    for row in df.to_dict("records"):
+        value = str(row.get("publisher", "") or "").strip()
+        if not value or value.lower() == "nan":
+            value = str(row.get("source", "") or "").strip()
+        for publisher in value.replace("|", ";").split(";"):
+            clean = publisher.strip()
+            if clean:
+                publishers.add(clean)
+    return len(publishers)
+
+
+def weighted_pairwise_absolute_distance(
+    sentiment_scores: pd.Series,
+    weights: pd.Series,
+    normalization: float = DISAGREEMENT_PAIRWISE_NORMALIZATION,
+) -> float:
+    """Return normalized weighted mean pairwise absolute sentiment distance."""
+    scores = pd.to_numeric(sentiment_scores, errors="coerce").fillna(0).to_numpy(dtype=float)
+    clean_weights = weights.reindex(sentiment_scores.index).fillna(0).clip(lower=0).to_numpy(dtype=float)
+    if len(scores) < 2:
+        return 0.0
+    pair_weight_sum = 0.0
+    weighted_distance_sum = 0.0
+    for left in range(len(scores) - 1):
+        for right in range(left + 1, len(scores)):
+            pair_weight = clean_weights[left] * clean_weights[right]
+            pair_weight_sum += pair_weight
+            weighted_distance_sum += pair_weight * abs(scores[left] - scores[right])
+    denominator = float(normalization) * pair_weight_sum
+    if denominator <= 0:
+        return 0.0
+    return float(np.clip(weighted_distance_sum / denominator, 0.0, 1.0))
+
+
+def disagreement_score(
+    sentiment_scores: pd.Series,
+    weights: pd.Series,
+    resolved_weights: WeightGroup,
+) -> float:
+    if len(sentiment_scores) < 2:
+        return 0.0
+    if DISAGREEMENT_METHOD == "legacy_std_mix":
+        sentiment_std = float(np.clip(weighted_std(sentiment_scores, weights), 0, 1))
+        mix = polarity_mix(sentiment_scores, weights)
+        disagreement_weights = resolved_weights["disagreement"]
+        return float(
+            np.clip(
+                100
+                * (
+                    disagreement_weights["weighted_std"] * sentiment_std
+                    + disagreement_weights["polarity_mix"] * mix
+                ),
+                0,
+                100,
+            )
+        )
+    if DISAGREEMENT_METHOD == "pairwise_distance":
+        return 100 * weighted_pairwise_absolute_distance(sentiment_scores, weights)
+    raise ValueError(f"不支持的 DISAGREEMENT_METHOD：{DISAGREEMENT_METHOD}")
 
 
 def apply_article_formula(df: pd.DataFrame, weights: WeightGroup | None = None) -> pd.DataFrame:
@@ -251,7 +358,7 @@ def sector_metrics(
 ) -> pd.DataFrame:
     """Calculate sector metrics with one formula implementation and supplied weights."""
     if df.empty:
-        return pd.DataFrame(columns=["sector", "article_count", *METRIC_COLUMNS])
+        return pd.DataFrame(columns=["sector", "article_count", "event_count", "publisher_count", *METRIC_COLUMNS])
 
     resolved = resolve_weights(weights)
     working = apply_article_formula(df, resolved)
@@ -270,6 +377,8 @@ def sector_metrics(
                 {
                     "sector": sector,
                     "article_count": 0,
+                    "event_count": 0,
+                    "publisher_count": 0,
                     "optimism": 0.0,
                     "fear": 0.0,
                     "uncertainty": 0.0,
@@ -281,24 +390,22 @@ def sector_metrics(
             continue
 
         group_weights = safe_weights(group)
-        weighted_risk = weighted_mean(group["risk_intensity"], group_weights)
-        if len(group) < 3:
+        risk_events = event_representatives(group)
+        risk_event_weights = safe_weights(risk_events)
+        weighted_risk = weighted_mean(risk_events["risk_intensity"], risk_event_weights)
+        if len(risk_events) < 3:
             risk_p90 = weighted_risk
         else:
-            risk_p90 = float(pd.to_numeric(group["risk_intensity"], errors="coerce").fillna(0).quantile(0.9))
+            risk_p90 = weighted_quantile(risk_events["risk_intensity"], risk_event_weights, 0.9)
 
-        sentiment_std = float(np.clip(weighted_std(group["sentiment_score"], group_weights), 0, 1))
-        mix = polarity_mix(group["sentiment_score"], group_weights)
-        disagreement_weights = resolved["disagreement"]
-        disagreement = 100 * (
-            disagreement_weights["weighted_std"] * sentiment_std
-            + disagreement_weights["polarity_mix"] * mix
-        )
+        disagreement = disagreement_score(group["sentiment_score"], group_weights, resolved)
         risk_weights = resolved["risk_intensity"]
         rows.append(
             {
                 "sector": sector,
                 "article_count": int(len(group)),
+                "event_count": int(len(risk_events)),
+                "publisher_count": distinct_publisher_count(group),
                 "optimism": weighted_mean(group["optimism"], group_weights),
                 "fear": weighted_mean(group["fear"], group_weights),
                 "uncertainty": weighted_mean(group["uncertainty"], group_weights),

@@ -350,3 +350,19 @@
 - 宏观保底修复：Unmapped 宏观事件仍保证入选，但不再固定置顶。若它未自然进入前 5，则替换最低普通事件，随后所有入选事件按 `driver_score` 降序重排；仅此类保障性入选记录标记 `macro_guaranteed=True`，页面元信息显示“宏观保底”。README 同步两窗口语义和宏观按分数落位规则；driver_score、六维聚合、简报 24 小时逻辑和正文候选逻辑未改。
 - 验证：新增 30 天不扩窗、宏观保底仍入列且最低分落第 5 位/最终分数降序两项回归（并保留上一轮旧高风险过滤与扩窗测试）。`compileall` 通过；完整 `unittest discover -s tests` 共 25 项通过。AppTest 验证默认 48 小时切换至 30 天 0 异常，标题同步为 `Top Market Drivers（近 30 天）`。真实工作集验证短窗 5 条使用 48 小时、长窗 5 条固定 720 小时，均满足窗口时间边界和分数降序；两种模式当前各有 1 条宏观保底事件。
 - 当前项目状态：本阶段的时效窗口修复与本次窗口切换/宏观排序增量均已完成，尚未提交，等待用户验收后按阶段名称提交。
+## 2026-07-13 07:45
+
+- 阶段名称 / 本次操作目标：Tier-A：六维公式优化第一批 + 热力图相对化展示。
+- Fear 与方向门控：新增 `panic_keywords.json`，Fear 的 persisted `s_shock` 改只读市场恐慌/避险反应词；`shock_keywords.json` 保留风险事件审计分组但不再进入 Fear。新增 `positive_direction_blockers.json`，同句同时命中 growth/bullish 与 slow/slowing/misses/cut/weak/decline 等反向修饰时不计正向组件。真实样例验证：Costco 的“growth…slowdown”、McDonald’s 的“Overweight rating…reduced”、GE/Lockheed 的“growth…lower”均保留原文但 `g_growth/b_bull=0`。
+- Risk 与 Disagreement：文章级 Risk 默认改为 `RISK_COMBINE="noisy_or"` 的有界联合，`sum` 作为消融开关保留；板块 Risk 先按 event_id 取最高 agg_weight 代表，使用加权 P90。Disagreement 默认改为无阈值的加权成对绝对情绪距离，旧 `legacy_std_mix`/PolarityMix 保留为 config 消融开关。Risk、Fear 语义和公式说明已同步 README/Evaluation。
+- 快照与热力图：`PIPELINE_REVISION` 升为 r4；sector snapshot 新增 `event_count`、`publisher_count`，r1-r3 历史行保留空值，今日 r4 两个数据源/两套公式共 44 行均完整。市场总览与板块比较的热力图默认按维度内板块 min-max 相对位置上色，数字/hover 仍显示原始分，并提供“绝对 0-100 定标”切换。
+- 全量重跑与验证：Demo 全量处理 132 条，真实新闻全量处理 2,976 条，CUDA embedding 聚类成功。真实跨板块 std r3→r4：Optimism `2.1196→2.1574`、Fear `3.3836→3.3343`、Uncertainty `2.8536→2.8536`、Attention `28.7480→28.7480`、Disagreement `9.2288→3.6529`、Risk `7.1401→6.9608`。Risk 分布为 `0:2462, 0-5:8, 5-20:28, 20-40:212, 40-60:173, 60-80:52, 80-100:41`。Fear–Risk 排名相关性 `-0.3545→-0.3727`，绝对值略增 0.0182，未出现预期下降，已如实记录，未为追逐该统计量额外调参。
+- 验证与验收：`compileall` 通过；完整 `unittest discover -s tests` 27 项通过；市场总览与板块比较 AppTest 的相对/绝对热力图切换均无异常。Playwright 前置检查发现本机缺少 npx，未绕过技能执行浏览器截图；用户已用其他工具完成两种模式的视觉核对并验收通过。
+- 当前项目状态：Tier-A 完成，等待按阶段名称提交。
+
+## 2026-07-13 07:56
+
+- Tier-A 验收补记：外部浏览器已核对市场总览与板块比较两页热力图的“横截面相对 / 绝对 0-100”两种模式；相对模式逐列分化正常，绝对模式与旧行为一致，caption 会随模式正确切换。按验收结论跳过本地 Playwright 截图步骤。
+- Fear–Risk 解耦口径修正：文章级 Pearson 相关性为 `0.034`（`n=2,976`），接近独立，可作为解耦成功的有效验证；11 个板块的排名相关性样本过小，不再作为验收指标，原先“预期下降”的要求作废。
+- 分歧度解释补记：跨板块 std 从 `9.2288` 降至 `3.6529` 是移除 PolarityMix 后的可预期代价；旧 `legacy_std_mix` 公式仍由 config 开关保留，供第二阶段消融对比。
+- 当前项目状态：Tier-A 已通过验收，准备按阶段名称提交。

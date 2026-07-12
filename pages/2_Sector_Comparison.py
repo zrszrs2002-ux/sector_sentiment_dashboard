@@ -43,7 +43,16 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Sector Heatmap")
-render_sector_heatmap(sector_df)
+heatmap_mode = st.radio(
+    "热力图上色模式",
+    options=["横截面相对", "绝对 0-100 定标"],
+    horizontal=True,
+    key="comparison_heatmap_color_mode",
+)
+render_sector_heatmap(
+    sector_df,
+    color_mode="relative" if heatmap_mode == "横截面相对" else "absolute",
+)
 
 st.subheader("板块排名速览")
 ranking_specs = [

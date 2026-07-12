@@ -35,12 +35,26 @@ def url_column_config(label: str = "链接") -> dict:
     return {"url": st.column_config.LinkColumn(label, display_text="打开")}
 
 
-def render_sector_heatmap(sector_df: pd.DataFrame, height: int = 430) -> None:
-    """按维度方向着色的板块六维热力图（市场总览与板块比较共用）。
+def heatmap_color_values(values: pd.Series, color_mode: str = "relative") -> pd.Series:
+    """Return 0-100 color positions while preserving raw values for labels."""
+    raw = pd.to_numeric(values, errors="coerce").fillna(0.0).astype(float)
+    if color_mode == "absolute":
+        return raw.clip(0.0, 100.0)
+    if color_mode != "relative":
+        raise ValueError(f"不支持的热力图上色模式：{color_mode}")
+    minimum = float(raw.min()) if len(raw) else 0.0
+    maximum = float(raw.max()) if len(raw) else 0.0
+    if maximum <= minimum:
+        return pd.Series(50.0, index=raw.index)
+    return (raw - minimum) / (maximum - minimum) * 100.0
 
-    单一色阶无法表达"高恐惧是坏事、高乐观是好事"的语义差异，因此每个维度
-    使用独立子图和独立色阶；色阶范围统一固定 0-100，保证跨维度可比。
-    """
+
+def render_sector_heatmap(
+    sector_df: pd.DataFrame,
+    height: int = 430,
+    color_mode: str = "relative",
+) -> None:
+    """Render raw scores with either cross-sectional or absolute color scaling."""
     sectors = sector_df["sector"].astype(str).tolist()
     fig = make_subplots(
         rows=1,
@@ -49,20 +63,22 @@ def render_sector_heatmap(sector_df: pd.DataFrame, height: int = 430) -> None:
         horizontal_spacing=0.006,
     )
     for idx, column in enumerate(METRIC_COLUMNS, start=1):
-        values = pd.to_numeric(sector_df[column], errors="coerce").fillna(0).round(1).tolist()
+        raw_values = pd.to_numeric(sector_df[column], errors="coerce").fillna(0.0)
+        color_values = heatmap_color_values(raw_values, color_mode)
         fig.add_trace(
             go.Heatmap(
-                z=[[value] for value in values],
+                z=[[float(value)] for value in color_values],
                 x=[METRIC_LABELS[column]],
                 y=sectors,
                 zmin=0,
                 zmax=100,
                 colorscale=_HEATMAP_COLOR_SCALES[column],
                 showscale=False,
-                text=[[f"{value:.1f}"] for value in values],
+                text=[[f"{float(value):.1f}"] for value in raw_values],
                 texttemplate="%{text}",
                 textfont={"size": 11},
-                hovertemplate=f"%{{y}} · {METRIC_LABELS[column]}：%{{z:.1f}}<extra></extra>",
+                customdata=[[float(value)] for value in raw_values],
+                hovertemplate=f"%{{y}} · {METRIC_LABELS[column]}：%{{customdata[0]:.1f}}<extra></extra>",
             ),
             row=1,
             col=idx,
@@ -70,7 +86,15 @@ def render_sector_heatmap(sector_df: pd.DataFrame, height: int = 430) -> None:
     fig.update_yaxes(autorange="reversed")
     fig.update_layout(height=height, margin=dict(l=10, r=10, t=24, b=10))
     st.plotly_chart(fig, use_container_width=True)
-    st.caption(
-        "配色说明：乐观度越高越绿；恐惧度、不确定性、分歧度、风险强度越高越红；"
-        "关注度为中性热度指标，蓝色越深表示媒体关注越高。所有色阶固定 0-100。"
-    )
+    if color_mode == "relative":
+        st.caption(
+            "配色说明：颜色表示该维度内 11 个板块的相对位置，单元格数字为原始分；"
+            "乐观度高=绿，恐惧度、不确定性、分歧度、风险强度高=红，关注度高=蓝。"
+            "历史快照满 30 天后，将升级为相对自身历史的分位展示。"
+        )
+    else:
+        st.caption(
+            "配色说明：颜色与数字均按绝对 0–100 分定标；乐观度高=绿，"
+            "恐惧度、不确定性、分歧度、风险强度高=红，关注度高=蓝。"
+            "历史快照满 30 天后，将升级为相对自身历史的分位展示。"
+        )
