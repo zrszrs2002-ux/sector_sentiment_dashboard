@@ -222,10 +222,11 @@ python -m src.event_clustering --input data/real_processed_articles.csv --engine
 python scripts/sample_for_annotation.py
 ```
 
-脚本按预测板块 × FinBERT 三分类做确定性轮询均衡抽样，默认随机种子为 `5720`；容量不足的小层取尽后，剩余名额分配给仍有候选的层。输出：
+脚本与 Evaluation 页面的“步骤 1”均按预测板块 × FinBERT 三分类做确定性轮询均衡抽样。页面可配置抽样条数和随机种子，默认值分别为 `300` 与 `5720`；同一新闻池、条数和种子会精确复现同一批 article_id，变更种子会生成新批次。容量不足的小层取尽后，剩余名额分配给仍有候选的层。输出：
 
 - `data/annotation/annotation_blind.csv`：只含文章原文、URL、时间和空白人工标签，严禁包含预测字段。
 - `data/annotation/annotation_key.csv`：私有对账文件，保存 FinBERT 情绪概率、置信度、预测板块、风险类别和证据句，不提供给第一遍主标注者。
+- `data/annotation/annotation_meta.json`：当前盲标批次的实际条数、随机种子、生成时间与 article_id 指纹。评估报告必须引用该文件记录的最终批次种子，而非页面输入框的当前默认值。
 - `data/annotation/sentiment_errors.csv`：评估后导出的全部 FinBERT 情绪误判。
 - `docs/annotation_guide.md`：情绪边界、风险类别、证据句标准和两遍标注流程。
 

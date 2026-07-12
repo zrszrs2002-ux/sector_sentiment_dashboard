@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import random
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -59,6 +62,76 @@ def excel_hyperlink_formula(url: object) -> str:
         return value
     escaped_url = value.replace('"', '""')
     return f'=HYPERLINK("{escaped_url}","打开原文")'
+
+
+def annotation_article_id_sha256(frame: pd.DataFrame) -> str:
+    """Return an ordered article-id fingerprint for the persisted blind sample."""
+    if "article_id" not in frame.columns:
+        raise ValueError("盲标样本缺少 article_id，无法生成批次指纹。")
+    article_ids = frame["article_id"].fillna("").astype(str)
+    payload = "\n".join(article_ids).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def build_annotation_metadata(blind: pd.DataFrame, seed: int) -> dict[str, int | str]:
+    """Build durable provenance for the exact blind sample written to disk."""
+    return {
+        "sample_size": int(len(blind)),
+        "seed": int(seed),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "article_id_sha256": annotation_article_id_sha256(blind),
+    }
+
+
+def write_annotation_metadata(path: Path, metadata: dict[str, int | str]) -> None:
+    """Atomically replace annotation provenance after the blind/key pair is written."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    temp_path = path.with_name(f".{path.name}.{timestamp}.tmp")
+    try:
+        temp_path.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temp_path.replace(path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def read_annotation_metadata(path: Path) -> dict[str, int | str] | None:
+    """Return validated persisted metadata, or None when it is absent or malformed."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    required = {"sample_size", "seed", "generated_at", "article_id_sha256"}
+    if not isinstance(payload, dict) or not required.issubset(payload):
+        return None
+    if type(payload["sample_size"]) is not int or payload["sample_size"] < 0:
+        return None
+    if type(payload["seed"]) is not int:
+        return None
+    if not isinstance(payload["generated_at"], str) or not payload["generated_at"].strip():
+        return None
+    if not isinstance(payload["article_id_sha256"], str) or not payload["article_id_sha256"].strip():
+        return None
+    return payload
+
+
+def annotation_metadata_matches_blind(
+    metadata: dict[str, int | str] | None,
+    blind: pd.DataFrame,
+) -> bool:
+    """Ensure displayed provenance belongs to the currently persisted blind CSV."""
+    if metadata is None:
+        return False
+    return (
+        metadata["sample_size"] == len(blind)
+        and metadata["article_id_sha256"] == annotation_article_id_sha256(blind)
+    )
+
 
 def read_required_csv(path: Path, required_columns: set[str]) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
@@ -183,6 +256,10 @@ def generate_annotation_samples(
     output_dir.mkdir(parents=True, exist_ok=True)
     write_csv_atomic(output_dir / "annotation_blind.csv", BLIND_FIELDS, blind.to_dict("records"))
     write_csv_atomic(output_dir / "annotation_key.csv", KEY_FIELDS, key.to_dict("records"))
+    write_annotation_metadata(
+        output_dir / "annotation_meta.json",
+        build_annotation_metadata(blind, seed),
+    )
     return blind, key
 
 

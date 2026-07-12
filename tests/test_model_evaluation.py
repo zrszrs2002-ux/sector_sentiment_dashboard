@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from scripts.sample_for_annotation import BLIND_FIELDS, build_annotation_files
+from src.annotation_sampling import annotation_metadata_matches_blind, read_annotation_metadata
 from src.evaluation import SENTIMENT_LABELS, evaluate_annotation_files
 
 
@@ -147,6 +148,32 @@ class ModelEvaluationTests(unittest.TestCase):
             self.assertEqual(len(private_key), 24)
             self.assertTrue((output_dir / "annotation_blind.csv").exists())
             self.assertTrue((output_dir / "annotation_key.csv").exists())
+            metadata = read_annotation_metadata(output_dir / "annotation_meta.json")
+            self.assertIsNotNone(metadata)
+            self.assertEqual(metadata["sample_size"], 24)
+            self.assertEqual(metadata["seed"], 5720)
+            self.assertTrue(annotation_metadata_matches_blind(metadata, blind))
+
+            first_article_ids = blind["article_id"].tolist()
+            changed_blind, _ = build_annotation_files(
+                raw_path,
+                processed_path,
+                output_dir,
+                sample_size=24,
+                seed=1234,
+            )
+            restored_blind, _ = build_annotation_files(
+                raw_path,
+                processed_path,
+                output_dir,
+                sample_size=24,
+                seed=5720,
+            )
+            self.assertNotEqual(set(changed_blind["article_id"]), set(first_article_ids))
+            self.assertEqual(restored_blind["article_id"].tolist(), first_article_ids)
+            restored_metadata = read_annotation_metadata(output_dir / "annotation_meta.json")
+            self.assertEqual(restored_metadata["seed"], 5720)
+            self.assertTrue(annotation_metadata_matches_blind(restored_metadata, restored_blind))
 
 
 if __name__ == "__main__":

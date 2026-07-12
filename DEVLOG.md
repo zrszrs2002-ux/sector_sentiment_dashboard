@@ -330,3 +330,10 @@
 
 - 小补丁：盲标 CSV 的 `url` 列支持 Excel 一键跳转。`src/annotation_sampling.py` 对 HTTP/HTTPS URL 生成 `HYPERLINK()` 公式，显示“打开原文”；空值、非 URL 值和已格式化公式保持原样。`pages/5_Evaluation.py` 的下载路径也会执行同一格式化，因此已存在的旧盲标样本无需重新抽样即可下载为可点击链接。
 - 文档与验证：标注手册补充 `url` 只读及点击说明；抽样契约测试新增超链接断言。已验证公式 Unicode 显示文本为“打开原文”、重复格式化不嵌套、页面 AppTest 0 异常并仍显示盲标 CSV/手册两个下载入口。
+## 2026-07-13 06:10
+
+- 阶段名称 / 本次操作目标：评估页抽样参数控件与盲标批次元数据持久化。
+- 具体做了什么：在 Evaluation 页面“步骤 1：获取盲标样本”恢复“抽样条数”和“随机种子”控件，默认分别读取 `ANNOTATION_SAMPLE_SIZE=300` 和 `ANNOTATION_SAMPLE_SEED=5720`，点击生成时将两项参数传入既有确定性分层抽样。新增 `data/annotation/annotation_meta.json`，持久化当前批次实际条数、种子、UTC 生成时间和 article_id 指纹；blind/key 写入后以原子替换方式写入元数据。页面从该文件读取，并在指纹和条数与当前 blind CSV 对账成功后才显示“当前样本种子”和生成时间，应用重启不会误显示输入框默认值。README 与标注手册同步说明页面可配置种子，报告应以 metadata 中最终批次种子为准。
+- 历史批次迁移与验收：在临时目录按 5720 重建当前 300 条真实新闻盲标，article_id 顺序与历史 `annotation_blind.csv` 精确一致后，才为当前批次写入 metadata；生成时间使用该 blind 文件原始 mtime `2026-07-12T11:18:58.346933+00:00`。真实新闻池验证 `5720 → 1234 → 5720`：1234 的 article_id 集合不同，恢复 5720 后按顺序精确复现。Streamlit AppTest 0 异常，确认两个控件存在且无 session 加载时显示持久化种子 5720。
+- 验证：`python -m compileall -q src pages app.py` 通过；完整 `python -m unittest discover -s tests` 运行 21 项、全部通过；`python -m unittest discover` 默认未进入 tests 目录而显示 0 项，故不作为验收结果。
+- 当前项目状态：本阶段实现、历史批次 metadata、文档和验证均完成，尚未提交，等待用户验收后按阶段名称提交。
