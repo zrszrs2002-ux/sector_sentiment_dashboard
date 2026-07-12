@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.config import EVENT_COVERAGE_BOOST
+from src.config import DRIVER_MIN_EVENTS, DRIVER_WINDOW_HOURS, EVENT_COVERAGE_BOOST
 from src.event_clustering import split_sources
 
 
@@ -147,17 +147,87 @@ def event_driver_rows(df: pd.DataFrame) -> pd.DataFrame:
     return events
 
 
-def top_driver_articles(df: pd.DataFrame, limit: int = 5, macro_limit: int = 1) -> pd.DataFrame:
-    """返回重点驱动事件，并确保 Unmapped 宏观事件可进入展示层。"""
-    events = event_driver_rows(df)
+def _utc_timestamp(value: object | None) -> pd.Timestamp:
+    timestamp = pd.Timestamp.now(tz="UTC") if value is None else pd.Timestamp(value)
+    if pd.isna(timestamp):
+        raise ValueError("Top Drivers 的参考时间无效。")
+    return timestamp.tz_localize("UTC") if timestamp.tzinfo is None else timestamp.tz_convert("UTC")
+
+
+def _driver_window_options(initial_window_hours: int) -> tuple[int, ...]:
+    initial = max(1, int(initial_window_hours))
+    return tuple(dict.fromkeys(hours for hours in (initial, 72, 168) if hours >= initial))
+
+
+def recent_event_driver_rows(
+    df: pd.DataFrame,
+    window_hours: int = DRIVER_WINDOW_HOURS,
+    min_events: int = DRIVER_MIN_EVENTS,
+    reference_time: object | None = None,
+) -> tuple[pd.DataFrame, int]:
+    """事件折叠前先按发布时间筛选，并在新闻荒时逐级扩窗。"""
+    windows = _driver_window_options(window_hours)
+    used_window = windows[-1]
+    if df.empty or "published_at" not in df:
+        return df.head(0).copy(), used_window
+
+    reference = _utc_timestamp(reference_time)
+    published = pd.to_datetime(df["published_at"], errors="coerce", utc=True)
+    required_events = max(1, int(min_events))
+    last_events = df.head(0).copy()
+    for candidate_window in windows:
+        threshold = reference - pd.Timedelta(hours=candidate_window)
+        window_articles = df.loc[published.ge(threshold)].copy()
+        events = event_driver_rows(window_articles)
+        last_events = events
+        used_window = candidate_window
+        if len(events) >= required_events:
+            break
+    return last_events, used_window
+
+
+def top_driver_articles(
+    df: pd.DataFrame,
+    limit: int = 5,
+    macro_limit: int = 1,
+    window_hours: int | None = None,
+    min_events: int = DRIVER_MIN_EVENTS,
+    reference_time: object | None = None,
+) -> pd.DataFrame:
+    """返回重点驱动事件；传入窗口时仅折叠和排序窗口内新闻。"""
+    used_window: int | None = None
+    if window_hours is None:
+        events = event_driver_rows(df)
+    else:
+        events, used_window = recent_event_driver_rows(
+            df,
+            window_hours=window_hours,
+            min_events=min_events,
+            reference_time=reference_time,
+        )
     if events.empty:
+        if used_window is not None:
+            events.attrs["driver_window_hours"] = used_window
         return events
 
-    top_regular = events.sort_values("driver_score", ascending=False).head(limit)
-    top_macro = macro_articles(events).sort_values("driver_score", ascending=False).head(macro_limit)
+    ranked_events = events.sort_values("driver_score", ascending=False, kind="stable")
+    top_regular = ranked_events.head(limit)
+    top_macro = macro_articles(ranked_events).head(macro_limit)
+    guaranteed_macro_ids: set[str] = set()
     if top_macro.empty:
-        return top_regular
-
-    macro_ids = set(top_macro["event_id"].astype(str))
-    regular_fill = top_regular[~top_regular["event_id"].astype(str).isin(macro_ids)]
-    return pd.concat([top_macro, regular_fill], ignore_index=True).head(limit)
+        result = top_regular
+    else:
+        natural_ids = set(top_regular["event_id"].astype(str))
+        macro_ids = set(top_macro["event_id"].astype(str))
+        guaranteed_macro_ids = macro_ids - natural_ids
+        if guaranteed_macro_ids:
+            non_macro = ranked_events[~ranked_events["event_id"].astype(str).isin(macro_ids)]
+            regular_slots = max(0, limit - len(top_macro))
+            result = pd.concat([non_macro.head(regular_slots), top_macro], ignore_index=True)
+        else:
+            result = top_regular
+    result = result.sort_values("driver_score", ascending=False, kind="stable").head(limit).copy()
+    result["macro_guaranteed"] = result["event_id"].astype(str).isin(guaranteed_macro_ids)
+    if used_window is not None:
+        result.attrs["driver_window_hours"] = used_window
+    return result

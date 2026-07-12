@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 
-from src.driver_analysis import collapse_articles_by_event
+from src.driver_analysis import collapse_articles_by_event, top_driver_articles
 from src.event_clustering import cluster_articles, event_groups
 from src.scoring import calculate_risk_intensity
 from src.sentiment_model import ArticleSentiment
@@ -36,6 +36,23 @@ def event_record(article_id: str, hours: int, score: float = 0.0) -> dict[str, s
         "sentiment_score": str(score),
         "agg_weight": "1.0",
         "source": "Yahoo Finance RSS",
+    }
+
+
+
+def driver_record(article_id: str, published: datetime, risk: float = 0.0) -> dict[str, object]:
+    return {
+        "article_id": article_id,
+        "event_id": f"event-{article_id}",
+        "title": article_id,
+        "sector": "Technology",
+        "published_at": published.isoformat(),
+        "risk_intensity": risk,
+        "sentiment_score": 0.0,
+        "uncertainty": 0.0,
+        "agg_weight": 1.0,
+        "source": "Reuters",
+        "publisher": "Reuters",
     }
 
 
@@ -92,6 +109,87 @@ class SignalQualityTests(unittest.TestCase):
         )
         collapsed = collapse_articles_by_event(df)
         self.assertEqual(int(collapsed.iloc[0]["source_count"]), 2)
+
+    def test_top_drivers_exclude_old_high_risk_news_in_48_hour_window(self) -> None:
+        now = datetime(2026, 7, 13, 12, tzinfo=UTC)
+        df = pd.DataFrame(
+            [
+                driver_record("old-high-risk", now - timedelta(days=5), risk=100),
+                driver_record("fresh-ordinary", now - timedelta(hours=1)),
+            ]
+        )
+        drivers = top_driver_articles(
+            df,
+            window_hours=48,
+            min_events=1,
+            reference_time=now,
+        )
+        self.assertEqual(drivers.attrs["driver_window_hours"], 48)
+        self.assertEqual(drivers["article_id"].tolist(), ["fresh-ordinary"])
+
+    def test_top_drivers_expand_window_when_48_hours_has_too_few_events(self) -> None:
+        now = datetime(2026, 7, 13, 12, tzinfo=UTC)
+        df = pd.DataFrame(
+            [
+                driver_record("fresh-1", now - timedelta(hours=1)),
+                driver_record("fresh-2", now - timedelta(hours=2)),
+                driver_record("expanded-1", now - timedelta(hours=60)),
+                driver_record("expanded-2", now - timedelta(hours=65)),
+                driver_record("expanded-3", now - timedelta(hours=70)),
+                driver_record("too-old", now - timedelta(hours=180), risk=100),
+            ]
+        )
+        drivers = top_driver_articles(
+            df,
+            window_hours=48,
+            min_events=5,
+            reference_time=now,
+        )
+        self.assertEqual(drivers.attrs["driver_window_hours"], 72)
+        self.assertEqual(
+            set(drivers["article_id"]),
+            {"fresh-1", "fresh-2", "expanded-1", "expanded-2", "expanded-3"},
+        )
+
+    def test_top_drivers_30_day_window_does_not_expand(self) -> None:
+        now = datetime(2026, 7, 13, 12, tzinfo=UTC)
+        df = pd.DataFrame(
+            [
+                driver_record("within-30-days", now - timedelta(days=29)),
+                driver_record("outside-30-days", now - timedelta(days=31), risk=100),
+            ]
+        )
+        drivers = top_driver_articles(
+            df,
+            window_hours=30 * 24,
+            min_events=5,
+            reference_time=now,
+        )
+        self.assertEqual(drivers.attrs["driver_window_hours"], 30 * 24)
+        self.assertEqual(drivers["article_id"].tolist(), ["within-30-days"])
+
+    def test_macro_guarantee_is_included_but_keeps_score_order(self) -> None:
+        now = datetime(2026, 7, 13, 12, tzinfo=UTC)
+        regular = [
+            driver_record("regular-1", now - timedelta(hours=1), risk=100),
+            driver_record("regular-2", now - timedelta(hours=2), risk=75),
+            driver_record("regular-3", now - timedelta(hours=3), risk=50),
+            driver_record("regular-4", now - timedelta(hours=4), risk=25),
+            driver_record("regular-5", now - timedelta(hours=5), risk=10),
+        ]
+        macro = driver_record("macro-low", now - timedelta(hours=6))
+        macro["sector"] = "Unmapped"
+        drivers = top_driver_articles(
+            pd.DataFrame([*regular, macro]),
+            window_hours=48,
+            min_events=5,
+            reference_time=now,
+        )
+        scores = drivers["driver_score"].tolist()
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(drivers.iloc[-1]["article_id"], "macro-low")
+        self.assertTrue(bool(drivers.iloc[-1]["macro_guaranteed"]))
+        self.assertIn("macro-low", set(drivers["article_id"]))
 
 
 if __name__ == "__main__":

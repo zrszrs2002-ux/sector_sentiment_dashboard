@@ -4,7 +4,14 @@ import streamlit as st
 
 from src.aggregation import market_metrics, sector_metrics
 from src.brief_generator import read_latest_brief
-from src.config import DISCLAIMER, METRIC_COLUMNS, METRIC_LABELS, WORKING_SET_DAYS
+from src.config import (
+    DISCLAIMER,
+    DRIVER_MIN_EVENTS,
+    DRIVER_WINDOW_HOURS,
+    METRIC_COLUMNS,
+    METRIC_LABELS,
+    WORKING_SET_DAYS,
+)
 from src.driver_analysis import top_driver_articles
 from src.rss_sources import distinct_value_count
 from src.ui_helpers import load_selected_articles, render_sector_heatmap
@@ -67,9 +74,11 @@ def render_driver_events(drivers: pd.DataFrame) -> None:
         source_count = int(float(row.get("source_count", 0) or 0))
         article_count = int(float(row.get("event_article_count", 1) or 1))
         boost_label = " · 已应用媒体覆盖加成" if bool(row.get("coverage_boost_applied")) else ""
+        macro_label = " · 宏观保底" if bool(row.get("macro_guaranteed")) else ""
         st.caption(
             f"{row.get('sector', 'Unmapped')} · {row.get('topic', '')} · "
-            f"事件分数 {float(row.get('driver_score', 0) or 0):.1f} · {source_count} 家媒体{boost_label}"
+            f"事件分数 {float(row.get('driver_score', 0) or 0):.1f} · {source_count} 家媒体"
+            f"{boost_label}{macro_label}"
         )
         st.write(str(row.get("driver_reason", "")))
 
@@ -160,5 +169,26 @@ with right_col:
 st.subheader("Sector Heatmap")
 render_sector_heatmap(sector_df)
 
-st.subheader("Top Market Drivers")
-render_driver_events(top_driver_articles(df, limit=5))
+driver_title = st.empty()
+driver_window_mode = st.radio(
+    "驱动事件窗口",
+    options=["近 48 小时", "近 30 天"],
+    horizontal=True,
+    key="market_driver_window",
+)
+requested_driver_window = (
+    DRIVER_WINDOW_HOURS if driver_window_mode == "近 48 小时" else WORKING_SET_DAYS * 24
+)
+drivers = top_driver_articles(
+    df,
+    limit=5,
+    window_hours=requested_driver_window,
+    min_events=DRIVER_MIN_EVENTS,
+)
+if driver_window_mode == "近 48 小时":
+    actual_driver_window = int(drivers.attrs.get("driver_window_hours", DRIVER_WINDOW_HOURS))
+    driver_window_label = f"近 {actual_driver_window} 小时"
+else:
+    driver_window_label = f"近 {WORKING_SET_DAYS} 天"
+driver_title.subheader(f"Top Market Drivers（{driver_window_label}）")
+render_driver_events(drivers)

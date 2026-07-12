@@ -205,6 +205,8 @@ Unregister-ScheduledTask -TaskName SectorSentimentRSSCollector -Confirm:$false
 - embedding 依赖、模型或推理不可用时自动回退 lexical：内容词 Jaccard 阈值为 `0.40`，无 ticker Unmapped 阈值为 `0.55`。日志会输出请求引擎、实际引擎、设备与回退原因。
 - 聚类采用并查集，但任一事件簇总时间跨度不得超过 72 小时；两篇报道若一篇情绪分数高于 `+0.3`、另一篇低于 `-0.3`，则禁止连边。全量处理会重算所给历史；增量抓取只比较新增文章与其 48 小时时间邻域以及本批新增文章，不重算历史向量。向量只在内存中存在，不持久化。
 - Top Drivers 每个事件只展示最高 `agg_weight` 的代表文章，簇级 `driver_score` 取文章级最大值；`source_count >= 3` 时乘 `EVENT_COVERAGE_BOOST = 1.15`。该加成只用于展示排序。
+- 市场总览的 Top Market Drivers 提供“近 48 小时”（默认）和“近 30 天”切换。48 小时模式少于 `DRIVER_MIN_EVENTS = 5` 个事件时，依次扩至 72、168 小时，并在标题显示实际窗口；30 天模式与 `WORKING_SET_DAYS` 一致且不扩窗。每日市场简报继续只使用其既有的 24 小时数据包，因此两者窗口不同是预期设计。
+- 宏观/市场级 Unmapped 事件保证进入 Top Drivers，但最终仍按 `driver_score` 降序落位；仅因保障性入选的条目会标记“宏观保底”，不再固定置顶。
 - 事件折叠不会修改 `dedup_factor`、`agg_weight` 或六维聚合。多家独立报道仍各自贡献 Attention 和情绪；簇内降权是否合理留待第二冲刺用标注数据评估。
 
 手动重算 processed CSV：

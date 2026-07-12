@@ -48,6 +48,9 @@ FULLTEXT_CACHE_PATH = DATA_DIR / "fulltext_cache.json"
 CSV_EXPORT_ENCODING = "utf-8-sig"
 BACKUP_RETENTION_COUNT = 10
 WORKING_SET_DAYS = 30
+# 市场总览 Top Drivers 从近 48 小时开始；事件不足时依次扩至 72/168 小时。
+DRIVER_WINDOW_HOURS = 48
+DRIVER_MIN_EVENTS = 5
 RAW_SQLITE_WARNING_MB = 50
 ANNOTATION_SAMPLE_SIZE = 300
 # 固定种子使标注抽样可复现；需要新的样本时再显式更改此配置。

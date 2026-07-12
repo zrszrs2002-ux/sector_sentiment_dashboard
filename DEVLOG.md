@@ -337,3 +337,16 @@
 - 历史批次迁移与验收：在临时目录按 5720 重建当前 300 条真实新闻盲标，article_id 顺序与历史 `annotation_blind.csv` 精确一致后，才为当前批次写入 metadata；生成时间使用该 blind 文件原始 mtime `2026-07-12T11:18:58.346933+00:00`。真实新闻池验证 `5720 → 1234 → 5720`：1234 的 article_id 集合不同，恢复 5720 后按顺序精确复现。Streamlit AppTest 0 异常，确认两个控件存在且无 session 加载时显示持久化种子 5720。
 - 验证：`python -m compileall -q src pages app.py` 通过；完整 `python -m unittest discover -s tests` 运行 21 项、全部通过；`python -m unittest discover` 默认未进入 tests 目录而显示 0 项，故不作为验收结果。
 - 当前项目状态：本阶段实现、历史批次 metadata、文档和验证均完成，尚未提交，等待用户验收后按阶段名称提交。
+## 2026-07-13 06:40
+
+- 阶段名称 / 本次操作目标：市场总览 Top Market Drivers 时效窗口修复。
+- 具体做了什么：在 `config.py` 新增 `DRIVER_WINDOW_HOURS = 48` 与 `DRIVER_MIN_EVENTS = 5`。`top_driver_articles()` 新增可选时间窗口路径：先按发布时间筛选，再做事件折叠与排序；市场总览显式启用该路径，窗口内少于 5 个事件时依次从 48 小时扩至 72、168 小时，返回结果通过 DataFrame attrs 携带实际窗口。市场总览标题改为 `Top Market Drivers（近 N 小时）`，如实标注实际使用窗口。README 说明页面从 48 小时起步、新闻荒自动扩窗；每日简报保持既有 24 小时数据包与调用逻辑不变，因此两者窗口不同是预期设计。
+- 边界与测试：`driver_score` 公式、六维聚合、brief_builder 与 fulltext 候选逻辑均未改。新增两项回归：5 天前高风险新闻在明确 48 小时窗口中被排除；48 小时只有 2 个事件时自动扩到 72 小时并纳入 5 个事件。`compileall` 通过；完整 `unittest discover -s tests` 共 23 项通过。真实市场总览工作集 2,914 条，实际使用 48 小时，5 个 Top Drivers 均不早于窗口下界；Market Overview AppTest 0 异常且标题显示 `Top Market Drivers（近 48 小时）`。
+- 当前项目状态：本阶段实现、文档与验证完成，尚未提交，等待用户验收后按阶段名称提交。
+## 2026-07-13 07:00
+
+- 阶段名称 / 本次操作目标：Top Market Drivers 窗口切换与宏观保底排序修复。
+- 具体做了什么：市场总览在 Top Market Drivers 标题下加入横向 radio：“近 48 小时”（默认）与“近 30 天”。两种模式复用 `top_driver_articles()` 的同一筛选、事件折叠和排序路径：48 小时模式保留 48→72→168 小时自动扩窗；30 天模式传入 `WORKING_SET_DAYS * 24 = 720`，候选窗口只有 720 小时，故不扩窗且标题显示“近 30 天”。页面以占位标题先占据 radio 上方位置、再在 radio 状态确定后填入实际窗口，解决 AppTest 切换重跑时序问题。
+- 宏观保底修复：Unmapped 宏观事件仍保证入选，但不再固定置顶。若它未自然进入前 5，则替换最低普通事件，随后所有入选事件按 `driver_score` 降序重排；仅此类保障性入选记录标记 `macro_guaranteed=True`，页面元信息显示“宏观保底”。README 同步两窗口语义和宏观按分数落位规则；driver_score、六维聚合、简报 24 小时逻辑和正文候选逻辑未改。
+- 验证：新增 30 天不扩窗、宏观保底仍入列且最低分落第 5 位/最终分数降序两项回归（并保留上一轮旧高风险过滤与扩窗测试）。`compileall` 通过；完整 `unittest discover -s tests` 共 25 项通过。AppTest 验证默认 48 小时切换至 30 天 0 异常，标题同步为 `Top Market Drivers（近 30 天）`。真实工作集验证短窗 5 条使用 48 小时、长窗 5 条固定 720 小时，均满足窗口时间边界和分数降序；两种模式当前各有 1 条宏观保底事件。
+- 当前项目状态：本阶段的时效窗口修复与本次窗口切换/宏观排序增量均已完成，尚未提交，等待用户验收后按阶段名称提交。
