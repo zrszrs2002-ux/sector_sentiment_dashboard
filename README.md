@@ -240,4 +240,14 @@ python scripts/sample_for_annotation.py
 
 Evaluation 页面在填写标签后计算：情绪 Accuracy、逐类 Precision/Recall/F1、Macro F1 和 3×3 混淆矩阵；同一标注集上的全中性基线、现有词典 fallback 与 FinBERT 三方对比；板块映射 Accuracy；风险多标签逐类 P/R/F1 与 Macro F1；证据句 Top-1 一致率；FinBERT 可靠性分桶和多分类 Brier score。证据句 Top-1 一致率衡量双方是否选中同一句，是比标注手册“可接受率”更严格的保守下界。风险 Macro F1 当前对配置中的 10 个规范风险类别等权计算，无支持类别按 0 计入，页面同时展示 support 便于解释；本批风险列空白按缺失处理而非 `none`，有效样本为 187 条。
 
-本批只评估文章分类层。六维指标层的敏感性分析、正式消融和稳健性验证属于后续批次。
+文章分类评估与六维权重敏感性分析相互独立；正式消融和显著性检验仍属于后续批次。
+
+### 13.1 权重敏感性分析
+
+`src/sensitivity_analysis.py` 仅从 `data/real_processed_articles.csv` 读取全部真实新闻，禁止使用或回退 `data/processed_articles.csv` 等 Demo 数据。模块复用已持久化的情绪概率、公式组件和现有 `sector_metrics(weights=...)` 聚合路径，按 `published_at` 的 UTC 日期全量回放 sector-day 六维分数，不重新运行 FinBERT。
+
+分析以 `ENHANCED_WEIGHTS` 为默认值，对每个维度的每个分量分别乘以 `{0, 0.5, 0.8, 1.2, 1.5}`，随后只在该维度内按比例重归一化到权重和为 1。因子 `0` 表示单分量消融，其余因子覆盖权重降低 20%/50% 与提高 20%/50% 的局部扰动。
+
+每个扰动相对默认 Enhanced 结果报告三项稳定性指标：各日 11 个板块排名的 Spearman 相关取均值；全部 sector-day 分数在 0–100 尺度上的平均绝对变化；各日 Top-3 板块集合的 Jaccard 重合率取均值。默认 `pairwise_distance` 分歧度公式不消费保留给 `legacy_std_mix` 的旧分量权重，因此这些旧权重的扰动可能如实显示为零变化，不会为了美化结果改公式。
+
+结果持久化到 `data/evaluation/sensitivity_analysis.csv`，包含生成时间、公式版本、固定真实数据源、目标维度/分量、扰动因子、默认与重归一化后权重及三项稳定性指标。Evaluation 页面的“运行权重敏感性分析”按钮才会触发重算；页面普通加载只展示已有结果、生成时间和每维度最敏感分量摘要。

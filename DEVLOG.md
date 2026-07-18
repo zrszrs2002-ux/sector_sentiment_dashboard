@@ -408,3 +408,11 @@
 - 具体做了什么：仅调整评估页展示文案与 README，不改计算逻辑。将“证据句 Precision”更名为“证据句 Top-1 一致率”，help 明确本批 `label_evidence_ok` 来自标注者独立证据句与模型证据句的自动匹配（规范化后互相包含，或相似度 ≥ 0.85），衡量双方选中同一句的比率，是比标注手册“可接受率”更严格的保守下界。风险区块注明空白按缺失处理而非 `none`，本批有效样本 187 条。README 同步上述口径，并登记 `data/annotation/annotation_manual_raw.csv` 为保留归一化前板块名与证据句原文的标注者原始审计文件。
 - 验证：Evaluation 页真实数据 AppTest 为 0 exception、0 error；页面成功出现“证据句 Top-1 一致率”、完整匹配口径 help，以及“风险列空白按缺失处理（不等于 none）；有效样本 187 条”caption。`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 32 项全部通过。
 - 当前项目状态：阶段 2 的页面文案、README 与验证均已完成，等待用户验收后按阶段名称提交；评估计算逻辑、人工标注文件和外部抓取/运行产物均未修改。
+
+## 2026-07-19 08:51
+
+- 阶段名称 / 本次操作目标：阶段 3：权重敏感性分析。
+- 具体做了什么：新增 `src/sensitivity_analysis.py`，只从 `real_processed_articles.csv` 正式加载路径读取真实新闻，对 `ENHANCED_WEIGHTS` 的六维 15 个分量分别按因子 `{0, 0.5, 0.8, 1.2, 1.5}` 做 one-at-a-time 扰动并在维内重归一化，复用 `sector_metrics()` 全量重算 sector-day 分数；不回退 Demo、不重跑 FinBERT。每组报告逐日板块排名 Spearman 均值、0-100 分数平均绝对变化和逐日 Top-3 Jaccard，75 行结果持久化到 `data/evaluation/sensitivity_analysis.csv`。Evaluation 页仅在按钮点击时计算，默认加载已有结果，并展示 75 行结果表和 6 行最敏感分量摘要；README 与 config TODO 已同步。
+- 真实数据结果：正式管线读取 3,866 条记录，其中 3,529 条属于 11 个目标板块，覆盖 51 个有效分析日、561 个 sector-day。包含因子 0 消融时，各维最低日均 Spearman 为 Optimism `0.358475`、Fear `0.163845`、Uncertainty `0.896136`、Attention `0.941126`、Disagreement `1.000000`、Risk Intensity `0.982224`；仅看因子 0.5/0.8/1.2/1.5 时依次为 `0.990357`、`0.998394`、`0.964027`、`0.993168`、`1.000000`、`0.997139`。数值按既定方法如实记录，未为美化结果调参；当前成对分歧度公式不使用 legacy 分歧权重，因此该维扰动结果保持不变。
+- 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 37 项全部通过，覆盖因子 1.0 与默认分数完全一致、维内权重和为 1、仅目标维变化、Demo 数据源拒绝及常量排名无警告处理。AppTest 实际点击“运行权重敏感性分析”完成真实全量复算，0 exception、0 error，成功写入结果；随后确认主表 `(75, 10)`、摘要表 `(6, 6)` 及生成时间、公式版本、真实数据源与解释 caption 均成功渲染。
+- 当前项目状态：阶段 3 实现、真实结果持久化、文档与验证均已完成，等待用户验收后按阶段名称提交；新闻、人工标注、外部抓取/简报/备份及 `.claude/` 既有变更均未纳入本阶段，AppTest 自动生成的敏感性结果备份保持未跟踪并排除在拟提交范围之外。

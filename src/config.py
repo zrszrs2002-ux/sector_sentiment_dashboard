@@ -35,10 +35,12 @@ RAW_ARTICLES_PATH = DATA_DIR / "raw_articles.csv"
 REAL_PROCESSED_ARTICLES_PATH = DATA_DIR / "real_processed_articles.csv"
 ERROR_RECORDS_PATH = DATA_DIR / "error_records.csv"
 ANNOTATION_DIR = DATA_DIR / "annotation"
+EVALUATION_DIR = DATA_DIR / "evaluation"
 ANNOTATION_BLIND_PATH = ANNOTATION_DIR / "annotation_blind.csv"
 ANNOTATION_KEY_PATH = ANNOTATION_DIR / "annotation_key.csv"
 ANNOTATION_META_PATH = ANNOTATION_DIR / "annotation_meta.json"
 ANNOTATION_ERRORS_PATH = ANNOTATION_DIR / "sentiment_errors.csv"
+SENSITIVITY_ANALYSIS_PATH = EVALUATION_DIR / "sensitivity_analysis.csv"
 ANNOTATION_GUIDE_PATH = PROJECT_ROOT / "docs" / "annotation_guide.md"
 SECTOR_DAILY_SCORES_PATH = DATA_DIR / "sector_daily_scores.csv"
 MARKET_DAILY_SCORES_PATH = DATA_DIR / "market_daily_scores.csv"
@@ -126,7 +128,7 @@ BASELINE_WEIGHTS = {
     "risk_intensity": {"weighted_mean": 0.7, "p90": 0.3},
 }
 
-# Enhanced 初始权重均为专家先验；TODO: 第二冲刺用标注数据做消融与敏感性校准。
+# Enhanced 初始权重均为专家先验；权重敏感性分析由 src/sensitivity_analysis.py 执行，人工标注校准另行开展。
 ENHANCED_WEIGHTS = {
     "optimism": {"p_positive": 0.7, "b_bull": 0.2, "g_growth": 0.1},
     "fear": {"p_negative": 0.7, "b_bear": 0.2, "s_shock": 0.1},
@@ -135,6 +137,9 @@ ENHANCED_WEIGHTS = {
     "disagreement": {"weighted_std": 0.5, "polarity_mix": 0.5},
     "risk_intensity": {"weighted_mean": 0.7, "p90": 0.3},
 }
+
+SENSITIVITY_PERTURBATION_FACTORS = (0.0, 0.5, 0.8, 1.2, 1.5)
+SENSITIVITY_TOP_K = 3
 
 ACTIVE_WEIGHTS = ENHANCED_WEIGHTS
 ACTIVE_FORMULA_VERSION = (
