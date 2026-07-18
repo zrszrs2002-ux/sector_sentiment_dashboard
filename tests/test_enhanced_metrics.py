@@ -19,7 +19,7 @@ from src.config import (
 )
 from src.keyword_signals import keyword_signal_components, normalized_sentence_hit_score, signal_terms
 from src.scoring import calculate_article_formula_values, normalized_entropy
-from src.ui_helpers import heatmap_color_values
+from src.ui_helpers import _HEATMAP_COLOR_SCALES, heatmap_color_values
 
 
 class EnhancedMetricTests(unittest.TestCase):
@@ -136,6 +136,22 @@ class EnhancedMetricTests(unittest.TestCase):
         absolute = heatmap_color_values(pd.Series([20.0, 21.0, 22.0]), "absolute")
         self.assertEqual(relative.tolist(), [0.0, 50.0, 100.0])
         self.assertEqual(absolute.tolist(), [20.0, 21.0, 22.0])
+
+    def test_heatmap_color_scales_are_mode_specific(self) -> None:
+        self.assertEqual(set(_HEATMAP_COLOR_SCALES), {"relative", "absolute"})
+        expected_metrics = {
+            "optimism",
+            "fear",
+            "uncertainty",
+            "attention",
+            "disagreement",
+            "risk_intensity",
+        }
+        for mode in ("relative", "absolute"):
+            self.assertEqual(set(_HEATMAP_COLOR_SCALES[mode]), expected_metrics)
+            self.assertEqual(_HEATMAP_COLOR_SCALES[mode]["optimism"], "Greens")
+        self.assertEqual(_HEATMAP_COLOR_SCALES["relative"]["fear"], "RdYlGn_r")
+        self.assertEqual(_HEATMAP_COLOR_SCALES["absolute"]["fear"], "Reds")
 
     def test_attention_switch_accepts_legacy_history(self) -> None:
         now = pd.Timestamp.now(tz="UTC")

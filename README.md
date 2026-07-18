@@ -19,6 +19,8 @@
 - 评估：提供 300 条分层盲标、全中性/词典/FinBERT 三方分类对比、混淆矩阵、风险与证据句指标、FinBERT 校准和错误样本分析；六维公式描述性对照保留为独立区块。
 - RSS 抓取：20 个有效源由 `data/rss_sources.json` 外置管理，包括 Yahoo ticker 模板、CNBC 分类、MarketWatch 分类、Google News、Nasdaq、Benzinga、Motley Fool、Investing.com、Fortune、Business Insider 和 NYT Business；不使用已停止服务的 Reuters RSS。
 
+市场总览与板块比较的热力图按模式使用连续色阶：相对模式为乐观度 `Greens`、关注度 `Blues`，其余警惕型指标使用高值趋红的 `RdYlGn_r`。绝对模式保持乐观度 `Greens` 与关注度 `Blues`，恐惧度改用 `Reds` 形成绿/红对照，不确定性、分歧度和风险强度继续使用 `RdYlGn_r`。
+
 ## 3. 数据来源与存储
 
 RSS 层只读取标题、摘要、URL、发布时间、feed 名和 entry 的 `source/publisher`。`publisher` 缺失时回退 feed 名。`content` 始终保留 RSS 摘要；系统只对当日高价值文章选择性抓取正文并写入 `body_text`，正文仅供模型分析，任何页面都不展示全文。MarketWatch、Google News、Fortune、Business Insider、NYT 等付费墙或聚合跳转源在配置中禁止正文请求，只收 headline feed。

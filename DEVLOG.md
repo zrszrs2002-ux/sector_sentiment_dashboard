@@ -373,3 +373,10 @@
 - 具体做了什么：300 条盲标已由标注者在 Excel 中完成，并经外部修复合并回 `data/annotation/annotation_blind.csv`；同时保留 `annotation_manual_raw.csv` 作为标注者原始填写审计文件及对应备份。人工标注文件未在本阶段清理、格式化、重新生成或重新抽样。
 - 验证：合并后的盲标 article_id 指纹与 `annotation_meta.json` 校验通过。
 - 当前项目状态：人工标注成果已整理完毕，待阶段验收后按阶段名称提交；`sentiment_errors.csv` 为评估管线衍生输出，本阶段排除并保持未跟踪状态。
+
+## 2026-07-19 06:58
+
+- 阶段名称 / 本次操作目标：阶段 1.5 范围收缩为仅色阶按模式区分（用户验收决定）。
+- 具体做了什么：先用 `git restore` 将原未提交阶段 1.5 的文字选色、gamma、色带压缩、caption、测试与文档改动全部恢复到 `9cb340c`；随后仅将 `_HEATMAP_COLOR_SCALES` 拆为 relative/absolute 两套命名色阶，并让 `render_sector_heatmap` 按 `color_mode` 取色。相对模式使用 `Greens / Blues / RdYlGn_r`；绝对模式使用 `Greens / Reds / Blues / RdYlGn_r`，Fear 高值保持红色方向。保留 HEAD 的 `texttemplate`、`textfont={"size": 11}`、hover、caption 与线性定标，不另加对比度映射算法。
+- 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 28 项全部通过；AppTest 实际打开市场总览与板块比较两页，并分别验证“横截面相对 / 绝对 0-100 定标”，四次渲染均为 0 exception。仅出现既有 `use_container_width` 弃用警告。
+- 当前项目状态：阶段 1.5 收缩版代码、轻量结构测试、README 与验证均完成，等待用户验收后按阶段名称提交；外部抓取产生的数据、缓存、快照、备份，以及 `.claude/`、`sentiment_errors.csv` 均保持原样并排除在本阶段之外。

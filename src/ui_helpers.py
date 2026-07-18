@@ -6,14 +6,24 @@ from plotly.subplots import make_subplots
 from src.config import METRIC_COLUMNS, METRIC_LABELS
 from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL, load_articles
 
-# 热力图按指标方向着色：正向指标高=绿；负向指标高=红；关注度是中性热度，用蓝色系。
+# 热力图按模式和指标语义着色：绿=乐观，红系=警惕型指标，蓝=关注度。
 _HEATMAP_COLOR_SCALES = {
-    "optimism": "RdYlGn",
-    "fear": "RdYlGn_r",
-    "uncertainty": "RdYlGn_r",
-    "attention": "Blues",
-    "disagreement": "RdYlGn_r",
-    "risk_intensity": "RdYlGn_r",
+    "relative": {
+        "optimism": "Greens",
+        "fear": "RdYlGn_r",
+        "uncertainty": "RdYlGn_r",
+        "attention": "Blues",
+        "disagreement": "RdYlGn_r",
+        "risk_intensity": "RdYlGn_r",
+    },
+    "absolute": {
+        "optimism": "Greens",
+        "fear": "Reds",
+        "uncertainty": "RdYlGn_r",
+        "attention": "Blues",
+        "disagreement": "RdYlGn_r",
+        "risk_intensity": "RdYlGn_r",
+    },
 }
 
 
@@ -72,7 +82,7 @@ def render_sector_heatmap(
                 y=sectors,
                 zmin=0,
                 zmax=100,
-                colorscale=_HEATMAP_COLOR_SCALES[column],
+                colorscale=_HEATMAP_COLOR_SCALES[color_mode][column],
                 showscale=False,
                 text=[[f"{float(value):.1f}"] for value in raw_values],
                 texttemplate="%{text}",
