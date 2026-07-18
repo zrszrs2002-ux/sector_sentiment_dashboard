@@ -45,7 +45,15 @@ def url_column_config(label: str = "链接") -> dict:
     return {"url": st.column_config.LinkColumn(label, display_text="打开")}
 
 
-def heatmap_color_values(values: pd.Series, color_mode: str = "relative") -> pd.Series:
+# 单色渐变色阶的端点接近纯白/纯黑，相对模式 min-max 会把最低板块钉在近白端造成刺眼断层；
+# 压缩色带行程让浅端保持可见的浅色。发散色阶（RdYlGn_r）两端为饱和色，不需要压缩。
+_SEQUENTIAL_SCALES = frozenset({"Greens", "Blues", "Reds"})
+_SEQUENTIAL_BAND = (20.0, 85.0)
+
+
+def heatmap_color_values(
+    values: pd.Series, color_mode: str = "relative", sequential: bool = False
+) -> pd.Series:
     """Return 0-100 color positions while preserving raw values for labels."""
     raw = pd.to_numeric(values, errors="coerce").fillna(0.0).astype(float)
     if color_mode == "absolute":
@@ -55,8 +63,13 @@ def heatmap_color_values(values: pd.Series, color_mode: str = "relative") -> pd.
     minimum = float(raw.min()) if len(raw) else 0.0
     maximum = float(raw.max()) if len(raw) else 0.0
     if maximum <= minimum:
-        return pd.Series(50.0, index=raw.index)
-    return (raw - minimum) / (maximum - minimum) * 100.0
+        positions = pd.Series(50.0, index=raw.index)
+    else:
+        positions = (raw - minimum) / (maximum - minimum) * 100.0
+    if sequential:
+        lower, upper = _SEQUENTIAL_BAND
+        positions = lower + positions * (upper - lower) / 100.0
+    return positions
 
 
 def render_sector_heatmap(
@@ -74,7 +87,10 @@ def render_sector_heatmap(
     )
     for idx, column in enumerate(METRIC_COLUMNS, start=1):
         raw_values = pd.to_numeric(sector_df[column], errors="coerce").fillna(0.0)
-        color_values = heatmap_color_values(raw_values, color_mode)
+        colorscale = _HEATMAP_COLOR_SCALES[color_mode][column]
+        color_values = heatmap_color_values(
+            raw_values, color_mode, sequential=colorscale in _SEQUENTIAL_SCALES
+        )
         fig.add_trace(
             go.Heatmap(
                 z=[[float(value)] for value in color_values],
@@ -82,13 +98,13 @@ def render_sector_heatmap(
                 y=sectors,
                 zmin=0,
                 zmax=100,
-                colorscale=_HEATMAP_COLOR_SCALES[color_mode][column],
+                colorscale=colorscale,
                 showscale=False,
                 text=[[f"{float(value):.1f}"] for value in raw_values],
                 texttemplate="%{text}",
                 textfont={"size": 11},
                 customdata=[[float(value)] for value in raw_values],
-                hovertemplate=f"%{{y}} · {METRIC_LABELS[column]}：%{{customdata[0]:.1f}}<extra></extra>",
+                hovertemplate=f"%{{y}} · {METRIC_LABELS[column]}：%{{customdata:.1f}}<extra></extra>",
             ),
             row=1,
             col=idx,

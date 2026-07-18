@@ -137,6 +137,14 @@ class EnhancedMetricTests(unittest.TestCase):
         self.assertEqual(relative.tolist(), [0.0, 50.0, 100.0])
         self.assertEqual(absolute.tolist(), [20.0, 21.0, 22.0])
 
+    def test_heatmap_sequential_band_compression(self) -> None:
+        banded = heatmap_color_values(pd.Series([20.0, 21.0, 22.0]), "relative", sequential=True)
+        self.assertEqual(banded.tolist(), [20.0, 52.5, 85.0])
+        flat = heatmap_color_values(pd.Series([30.0, 30.0]), "relative", sequential=True)
+        self.assertEqual(flat.tolist(), [52.5, 52.5])
+        absolute = heatmap_color_values(pd.Series([20.0, 21.0]), "absolute", sequential=True)
+        self.assertEqual(absolute.tolist(), [20.0, 21.0])
+
     def test_heatmap_color_scales_are_mode_specific(self) -> None:
         self.assertEqual(set(_HEATMAP_COLOR_SCALES), {"relative", "absolute"})
         expected_metrics = {

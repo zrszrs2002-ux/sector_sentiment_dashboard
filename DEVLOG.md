@@ -380,3 +380,10 @@
 - 具体做了什么：先用 `git restore` 将原未提交阶段 1.5 的文字选色、gamma、色带压缩、caption、测试与文档改动全部恢复到 `9cb340c`；随后仅将 `_HEATMAP_COLOR_SCALES` 拆为 relative/absolute 两套命名色阶，并让 `render_sector_heatmap` 按 `color_mode` 取色。相对模式使用 `Greens / Blues / RdYlGn_r`；绝对模式使用 `Greens / Reds / Blues / RdYlGn_r`，Fear 高值保持红色方向。保留 HEAD 的 `texttemplate`、`textfont={"size": 11}`、hover、caption 与线性定标，不另加对比度映射算法。
 - 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 28 项全部通过；AppTest 实际打开市场总览与板块比较两页，并分别验证“横截面相对 / 绝对 0-100 定标”，四次渲染均为 0 exception。仅出现既有 `use_container_width` 弃用警告。
 - 当前项目状态：阶段 1.5 收缩版代码、轻量结构测试、README 与验证均完成，等待用户验收后按阶段名称提交；外部抓取产生的数据、缓存、快照、备份，以及 `.claude/`、`sentiment_errors.csv` 均保持原样并排除在本阶段之外。
+
+## 2026-07-19 07:40
+
+- 阶段名称 / 本次操作目标：相对模式单色渐变色带压缩（外部直接修改，非 Codex 会话产出）。
+- 具体做了什么：在阶段 1.5 收缩版基础上，`src/ui_helpers.py` 新增 `_SEQUENTIAL_SCALES`（Greens/Blues/Reds）与 `_SEQUENTIAL_BAND=(20.0, 85.0)`；`heatmap_color_values` 增加 `sequential` 参数，相对模式下单色渐变列的色带行程线性压缩到 [20, 85]，避免最低板块渲染成近白、最高接近纯黑；发散色阶（RdYlGn_r）与绝对模式完全不变。`render_sector_heatmap` 按该列色阶是否单色渐变传入 `sequential`。texttemplate、textfont、hover、caption 均未改动。
+- 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 29 项全部通过（新增 1 项覆盖色带压缩端点、平值与绝对模式不受影响）。浏览器实测：乐观度列最浅格由近白 rgb(247,252,245) 变为可见浅绿 rgb(194,231,187)，最深格由近黑变为 rgb(7,115,49)；关注度同步收窄；恐惧度等 RdYlGn_r 列仍为全程饱和色。数据双簇（22-24 与 28.6-30.3）的色差仍可辨识，为真实分布信息。
+- 当前项目状态：与阶段 1.5 收缩版一并等待用户验收后按阶段名称提交。
