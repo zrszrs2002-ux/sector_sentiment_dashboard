@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 
 from src.aggregation import market_metrics, sector_metrics
-from src.config import BRIEF_WINDOW_HOURS, METRIC_COLUMNS, SECTORS
+from src.config import BRIEF_WINDOW_HOURS, METRIC_COLUMNS, PIPELINE_REVISION, SECTORS
 from src.daily_snapshots import load_market_snapshots, load_sector_snapshots
 from src.driver_analysis import macro_articles, top_driver_articles
 from src.rss_sources import distinct_value_count
@@ -46,14 +46,49 @@ def _window_articles(df: pd.DataFrame, generated_at: datetime) -> tuple[pd.DataF
     return window, start_ts, end_ts
 
 
+def _select_snapshot_rows(rows: pd.DataFrame, key_columns: list[str]) -> pd.DataFrame:
+    """Select one row per key, preferring the active pipeline then the latest timestamp."""
+    if rows.empty:
+        return rows.copy()
+    selected = rows.copy()
+    pipeline_values = (
+        selected["pipeline_revision"]
+        if "pipeline_revision" in selected
+        else pd.Series("", index=selected.index, dtype="object")
+    )
+    timestamp_values = (
+        selected["snapshot_timestamp"]
+        if "snapshot_timestamp" in selected
+        else pd.Series("", index=selected.index, dtype="object")
+    )
+    selected["_preferred_pipeline"] = (
+        pipeline_values.fillna("").astype(str).eq(PIPELINE_REVISION).astype(int)
+    )
+    selected["_snapshot_order"] = pd.to_datetime(
+        timestamp_values, utc=True, errors="coerce"
+    )
+    selected = selected.sort_values(
+        ["_preferred_pipeline", "_snapshot_order"],
+        kind="stable",
+        na_position="first",
+    )
+    if key_columns:
+        selected = selected.drop_duplicates(key_columns, keep="last")
+    else:
+        selected = selected.tail(1)
+    return selected.drop(columns=["_preferred_pipeline", "_snapshot_order"])
+
+
 def _previous_market_snapshot(data_source: str, snapshot_date) -> dict[str, Any] | None:
     snapshots = load_market_snapshots(data_source)
     if snapshots.empty:
         return None
-    previous = snapshots[snapshots["snapshot_date"] < snapshot_date].sort_values("snapshot_date")
+    previous = snapshots[snapshots["snapshot_date"] < snapshot_date]
     if previous.empty:
         return None
-    return previous.iloc[-1].to_dict()
+    latest_date = previous["snapshot_date"].max()
+    selected = _select_snapshot_rows(previous[previous["snapshot_date"].eq(latest_date)], [])
+    return selected.iloc[-1].to_dict()
 
 
 def _previous_sector_snapshots(data_source: str, snapshot_date) -> pd.DataFrame:
@@ -63,7 +98,8 @@ def _previous_sector_snapshots(data_source: str, snapshot_date) -> pd.DataFrame:
     previous_dates = sorted(date for date in snapshots["snapshot_date"].dropna().unique() if date < snapshot_date)
     if not previous_dates:
         return snapshots.head(0)
-    return snapshots[snapshots["snapshot_date"].eq(previous_dates[-1])].copy()
+    previous = snapshots[snapshots["snapshot_date"].eq(previous_dates[-1])].copy()
+    return _select_snapshot_rows(previous, ["sector"])
 
 
 def _metric_deltas(current: dict[str, float], previous: dict[str, Any] | None) -> dict[str, float | None]:
@@ -129,7 +165,7 @@ def _sector_rankings(sector_df: pd.DataFrame) -> dict[str, list[dict[str, Any]]]
 def _sector_movers(sector_df: pd.DataFrame, previous: pd.DataFrame) -> list[dict[str, Any]]:
     if sector_df.empty or previous.empty:
         return []
-    previous_by_sector = previous.set_index("sector")
+    previous_by_sector = _select_snapshot_rows(previous, ["sector"]).set_index("sector")
     movers: list[dict[str, Any]] = []
     for row in sector_df.to_dict("records"):
         sector = str(row.get("sector", ""))

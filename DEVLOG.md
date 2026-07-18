@@ -387,3 +387,10 @@
 - 具体做了什么：在阶段 1.5 收缩版基础上，`src/ui_helpers.py` 新增 `_SEQUENTIAL_SCALES`（Greens/Blues/Reds）与 `_SEQUENTIAL_BAND=(20.0, 85.0)`；`heatmap_color_values` 增加 `sequential` 参数，相对模式下单色渐变列的色带行程线性压缩到 [20, 85]，避免最低板块渲染成近白、最高接近纯黑；发散色阶（RdYlGn_r）与绝对模式完全不变。`render_sector_heatmap` 按该列色阶是否单色渐变传入 `sequential`。texttemplate、textfont、hover、caption 均未改动。
 - 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 29 项全部通过（新增 1 项覆盖色带压缩端点、平值与绝对模式不受影响）。浏览器实测：乐观度列最浅格由近白 rgb(247,252,245) 变为可见浅绿 rgb(194,231,187)，最深格由近黑变为 rgb(7,115,49)；关注度同步收窄；恐惧度等 RdYlGn_r 列仍为全程饱和色。数据双簇（22-24 与 28.6-30.3）的色差仍可辨识，为真实分布信息。
 - 当前项目状态：与阶段 1.5 收缩版一并等待用户验收后按阶段名称提交。
+
+## 2026-07-19 07:43
+
+- 阶段名称 / 本次操作目标：简报历史快照多版本选择修复。
+- 具体做了什么：修复真实新闻简报在 UTC 日期边界回看 `2026-07-12` 快照时，同一板块同时存在 r3/r4 两行而使 `.loc[sector]` 返回 DataFrame、后续 Series 参与 `or 0` 抛出歧义异常的问题。新增统一快照选择逻辑：每个键优先采用当前 `PIPELINE_REVISION`，缺失时按 `snapshot_timestamp` 取最新行；市场级上一期采用相同规则，`_sector_movers()` 入口再做防御性唯一化。历史 r3/r4 快照数据完整保留，未清理或重写。
+- 验证：新增 2 项回归测试覆盖板块 r3/r4 优先选择、无当前版本时最新时间回退、市场级同日多版本选择及 movers 标量差值；当前真实数据上一期从 22 行收敛为 11 个唯一 r4 板块，`build_brief_payload()` 成功返回 5 个唯一 movers；完整 `generate_daily_brief(force=True)` 调用链在 Mock LLM/写入下返回 generated，无 API 调用、无 data 写入。`python -m compileall -q src pages app.py` 通过，完整 unittest 31 项全部通过。
+- 当前项目状态：简报生成的 Series truth-value 异常已修复，代码、测试和真实数据调用链验证完成，等待用户验收后按阶段名称提交；外部抓取数据、缓存、快照、备份、`.claude/` 与 `sentiment_errors.csv` 均保持原样并排除在本阶段之外。
