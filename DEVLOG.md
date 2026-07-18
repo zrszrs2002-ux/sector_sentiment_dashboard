@@ -401,3 +401,10 @@
 - 具体做了什么：评估页上传与默认盲标 CSV 的读取，以及 `evaluate_annotation_files()` 对盲标文件的读取，均显式使用 `dtype=str`，避免含空值的二元标签列被 pandas 推断为 float；`annotation_key.csv` 保持原读取方式。`normalize_binary_label()` 同时接受 `"1.0"` / `"0.0"` 作为合法真/假值，形成双保险。新增临时 CSV 往返回归测试，覆盖 `"1"`、`"0"` 与空值混合列，并断言评估不抛异常、有效样本数正确。
 - 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 32 项全部通过。真实 300 条盲标评估成功，对齐 300 条、情绪有效 299 条，三方对比 3 组、混淆矩阵 3 个、校准分箱 7 个均有数据；风险有效样本 187 条，正常生成 140 条 `sentiment_errors.csv` 衍生记录。Evaluation 页 AppTest 为 0 exception、0 error，三方对比表、混淆矩阵与校准区块均成功渲染。
 - 当前项目状态：阶段 1 代码、回归测试、真实标注评估与页面验证均已完成，等待用户验收后按阶段名称提交；人工标注原始文件未修改，外部抓取数据、缓存、快照、备份及 `.claude/` 保持在本阶段提交之外，`sentiment_errors.csv` 作为评估管线衍生输出随本阶段纳入。
+
+## 2026-07-19 08:15
+
+- 阶段名称 / 本次操作目标：阶段 2：证据句与风险指标口径修正。
+- 具体做了什么：仅调整评估页展示文案与 README，不改计算逻辑。将“证据句 Precision”更名为“证据句 Top-1 一致率”，help 明确本批 `label_evidence_ok` 来自标注者独立证据句与模型证据句的自动匹配（规范化后互相包含，或相似度 ≥ 0.85），衡量双方选中同一句的比率，是比标注手册“可接受率”更严格的保守下界。风险区块注明空白按缺失处理而非 `none`，本批有效样本 187 条。README 同步上述口径，并登记 `data/annotation/annotation_manual_raw.csv` 为保留归一化前板块名与证据句原文的标注者原始审计文件。
+- 验证：Evaluation 页真实数据 AppTest 为 0 exception、0 error；页面成功出现“证据句 Top-1 一致率”、完整匹配口径 help，以及“风险列空白按缺失处理（不等于 none）；有效样本 187 条”caption。`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 32 项全部通过。
+- 当前项目状态：阶段 2 的页面文案、README 与验证均已完成，等待用户验收后按阶段名称提交；评估计算逻辑、人工标注文件和外部抓取/运行产物均未修改。

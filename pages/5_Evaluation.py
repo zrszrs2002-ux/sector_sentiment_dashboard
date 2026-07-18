@@ -335,14 +335,21 @@ else:
             help=f"有效标注 {result['sector_mapping']['sample_count']} 条",
         )
         evidence_metric.metric(
-            "证据句 Precision",
+            "证据句 Top-1 一致率",
             evidence_value,
-            help=f"有效标注 {result['evidence']['sample_count']} 条",
+            help=(
+                "本批 label_evidence_ok 由标注者独立选取的证据句与模型证据句"
+                "自动匹配生成（规范化后互相包含，或相似度 ≥ 0.85）；"
+                "该指标衡量双方选中同一句的比率，是比标注手册“可接受率”"
+                "更严格的保守下界。"
+                f"有效标注 {result['evidence']['sample_count']} 条。"
+            ),
         )
         if not result["risk"]["per_class"].empty:
             st.caption(
                 f"风险多标签 Macro F1：{result['risk']['macro_f1']:.3f}；"
-                f"有效标注 {result['risk']['sample_count']} 条。"
+                "本批标注中风险列空白按缺失处理（不等于 none）；"
+                f"有效样本 {result['risk']['sample_count']} 条。"
             )
             st.dataframe(
                 result["risk"]["per_class"].round(4),
