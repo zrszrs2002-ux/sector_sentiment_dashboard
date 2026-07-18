@@ -394,3 +394,10 @@
 - 具体做了什么：修复真实新闻简报在 UTC 日期边界回看 `2026-07-12` 快照时，同一板块同时存在 r3/r4 两行而使 `.loc[sector]` 返回 DataFrame、后续 Series 参与 `or 0` 抛出歧义异常的问题。新增统一快照选择逻辑：每个键优先采用当前 `PIPELINE_REVISION`，缺失时按 `snapshot_timestamp` 取最新行；市场级上一期采用相同规则，`_sector_movers()` 入口再做防御性唯一化。历史 r3/r4 快照数据完整保留，未清理或重写。
 - 验证：新增 2 项回归测试覆盖板块 r3/r4 优先选择、无当前版本时最新时间回退、市场级同日多版本选择及 movers 标量差值；当前真实数据上一期从 22 行收敛为 11 个唯一 r4 板块，`build_brief_payload()` 成功返回 5 个唯一 movers；完整 `generate_daily_brief(force=True)` 调用链在 Mock LLM/写入下返回 generated，无 API 调用、无 data 写入。`python -m compileall -q src pages app.py` 通过，完整 unittest 31 项全部通过。
 - 当前项目状态：简报生成的 Series truth-value 异常已修复，代码、测试和真实数据调用链验证完成，等待用户验收后按阶段名称提交；外部抓取数据、缓存、快照、备份、`.claude/` 与 `sentiment_errors.csv` 均保持原样并排除在本阶段之外。
+
+## 2026-07-19 07:54
+
+- 阶段名称 / 本次操作目标：阶段 1：盲标读取 dtype 修复。
+- 具体做了什么：评估页上传与默认盲标 CSV 的读取，以及 `evaluate_annotation_files()` 对盲标文件的读取，均显式使用 `dtype=str`，避免含空值的二元标签列被 pandas 推断为 float；`annotation_key.csv` 保持原读取方式。`normalize_binary_label()` 同时接受 `"1.0"` / `"0.0"` 作为合法真/假值，形成双保险。新增临时 CSV 往返回归测试，覆盖 `"1"`、`"0"` 与空值混合列，并断言评估不抛异常、有效样本数正确。
+- 验证：`python -m compileall -q src pages app.py` 通过；`python -m unittest discover -s tests` 共 32 项全部通过。真实 300 条盲标评估成功，对齐 300 条、情绪有效 299 条，三方对比 3 组、混淆矩阵 3 个、校准分箱 7 个均有数据；风险有效样本 187 条，正常生成 140 条 `sentiment_errors.csv` 衍生记录。Evaluation 页 AppTest 为 0 exception、0 error，三方对比表、混淆矩阵与校准区块均成功渲染。
+- 当前项目状态：阶段 1 代码、回归测试、真实标注评估与页面验证均已完成，等待用户验收后按阶段名称提交；人工标注原始文件未修改，外部抓取数据、缓存、快照、备份及 `.claude/` 保持在本阶段提交之外，`sentiment_errors.csv` 作为评估管线衍生输出随本阶段纳入。

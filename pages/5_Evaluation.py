@@ -35,8 +35,8 @@ from src.evaluation import (
 from src.ui_helpers import load_selected_articles
 
 
-def read_csv_file(source) -> pd.DataFrame:
-    return pd.read_csv(source, encoding="utf-8-sig")
+def read_csv_file(source, *, dtype=None) -> pd.DataFrame:
+    return pd.read_csv(source, encoding="utf-8-sig", dtype=dtype)
 
 
 def csv_download_bytes(frame: pd.DataFrame) -> bytes:
@@ -232,12 +232,12 @@ annotations = pd.DataFrame()
 annotation_key = pd.DataFrame()
 if uploaded_file is not None:
     try:
-        annotations = read_csv_file(uploaded_file)
+        annotations = read_csv_file(uploaded_file, dtype=str)
     except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
         st.error(f"标注 CSV 读取失败：{exc}")
 elif ANNOTATION_BLIND_PATH.exists():
     try:
-        annotations = read_csv_file(ANNOTATION_BLIND_PATH)
+        annotations = read_csv_file(ANNOTATION_BLIND_PATH, dtype=str)
     except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
         st.error(f"默认盲标文件读取失败：{exc}")
 

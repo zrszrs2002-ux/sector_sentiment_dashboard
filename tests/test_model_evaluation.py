@@ -8,7 +8,11 @@ import pandas as pd
 
 from scripts.sample_for_annotation import BLIND_FIELDS, build_annotation_files
 from src.annotation_sampling import annotation_metadata_matches_blind, read_annotation_metadata
-from src.evaluation import SENTIMENT_LABELS, evaluate_annotation_files
+from src.evaluation import (
+    SENTIMENT_LABELS,
+    evaluate_annotation_files,
+    normalize_binary_label,
+)
 
 
 def fake_annotation_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -70,6 +74,35 @@ def fake_annotation_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 class ModelEvaluationTests(unittest.TestCase):
+    def test_binary_labels_with_empty_cells_survive_csv_round_trip(self) -> None:
+        annotations, key = fake_annotation_frames()
+        annotations = annotations.head(3).copy()
+        annotations["label_sector_ok"] = ["1", "0", ""]
+        annotations["label_evidence_ok"] = ["1", "0", ""]
+        key = key.head(3).copy()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            annotation_path = root / "annotation_blind.csv"
+            key_path = root / "annotation_key.csv"
+            annotations.to_csv(annotation_path, index=False, encoding="utf-8-sig")
+            key.to_csv(key_path, index=False, encoding="utf-8-sig")
+
+            default_round_trip = pd.read_csv(annotation_path, encoding="utf-8-sig")
+            self.assertEqual(
+                default_round_trip["label_sector_ok"].dropna().tolist(),
+                [1.0, 0.0],
+            )
+            result = evaluate_annotation_files(
+                annotation_path,
+                key_path,
+                error_output_path=None,
+            )
+
+        self.assertEqual(result["sector_mapping"]["sample_count"], 2)
+        self.assertEqual(result["evidence"]["sample_count"], 2)
+        self.assertIs(normalize_binary_label("1.0"), True)
+        self.assertIs(normalize_binary_label("0.0"), False)
+
     def test_thirty_row_end_to_end_metrics(self) -> None:
         annotations, key = fake_annotation_frames()
         with tempfile.TemporaryDirectory() as temp_dir:

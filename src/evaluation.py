@@ -455,9 +455,9 @@ def normalize_binary_label(value: object) -> bool | None:
     if value is None or pd.isna(value):
         return None
     normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "y", "是", "正确", "合格"}:
+    if normalized in {"1", "1.0", "true", "yes", "y", "是", "正确", "合格"}:
         return True
-    if normalized in {"0", "false", "no", "n", "否", "错误", "不合格"}:
+    if normalized in {"0", "0.0", "false", "no", "n", "否", "错误", "不合格"}:
         return False
     return None
 
@@ -856,6 +856,6 @@ def evaluate_annotation_files(
     key_path: Path,
     error_output_path: Path | None = ANNOTATION_ERRORS_PATH,
 ) -> dict[str, Any]:
-    annotations = pd.read_csv(annotation_path, encoding="utf-8-sig")
+    annotations = pd.read_csv(annotation_path, encoding="utf-8-sig", dtype=str)
     annotation_key = pd.read_csv(key_path, encoding="utf-8-sig")
     return evaluate_model_annotations(annotations, annotation_key, error_output_path)
