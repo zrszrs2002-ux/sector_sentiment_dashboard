@@ -547,16 +547,16 @@ def process_articles_incremental(input_path, output_path, new_raw_records=None) 
     existing_records = read_article_csv(output_path)
     source_context_count = sync_source_context_from_raw(existing_records, raw_records)
     if source_context_count:
-        print(f"来源上下文同步完成：{source_context_count} 条历史 processed 记录吸收 raw 中的新 publisher/source。")
+        print(f"Source context sync complete: {source_context_count} historical processed records absorbed new publisher/source from raw.")
     source_upgrade_count = sum(1 for record in existing_records if upgrade_source_fields(record))
     if source_upgrade_count:
         print(
-            f"来源字段迁移完成：为 {source_upgrade_count} 条历史新闻补齐 publisher/source_weight，"
-            "并按 r3 公式重算 agg_weight。"
+            f"Source field migration complete: backfilled publisher/source_weight for {source_upgrade_count} historical articles "
+            "and recalculated agg_weight using the r3 formula."
         )
     upgraded_count = sum(1 for record in existing_records if upgrade_formula_fields(record))
     if upgraded_count:
-        print(f"公式组件迁移完成：复用现有模型概率，为 {upgraded_count} 条历史新闻补齐 enhanced 组件。")
+        print(f"Formula component migration complete: reused existing model probabilities to backfill enhanced components for {upgraded_count} historical articles.")
     processed_ids = {
         str(record.get("article_id", "")).strip()
         for record in existing_records
@@ -577,7 +577,7 @@ def process_articles_incremental(input_path, output_path, new_raw_records=None) 
     write_pipeline_outputs(output_path, merged_records, data_source_for_output_path(output_path))
     new_count = len(enriched_new_records)
     reused_count = len(existing_records)
-    print(f"增量处理完成：本次新增 {new_count} 条，复用 {reused_count} 条。")
+    print(f"Incremental processing complete: {new_count} new this run, {reused_count} reused.")
     return {
         "records": merged_records,
         "new_count": new_count,
@@ -588,7 +588,7 @@ def process_articles_incremental(input_path, output_path, new_raw_records=None) 
 
 def main() -> None:
     records = process_articles()
-    print(f"处理完成: {len(records)} 条")
+    print(f"Processing complete: {len(records)} records")
 
 
 if __name__ == "__main__":

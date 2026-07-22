@@ -139,7 +139,7 @@ def select_fulltext_candidates(
 
 def _extract_body(url: str) -> str:
     if requests is None or trafilatura is None:
-        raise RuntimeError("缺少 trafilatura 或 requests")
+        raise RuntimeError("Missing trafilatura or requests")
     response = requests.get(
         url,
         headers={"User-Agent": RSS_USER_AGENT, "Accept": "text/html,application/xhtml+xml"},
@@ -156,7 +156,7 @@ def _extract_body(url: str) -> str:
     )
     cleaned = _clean_body(body)
     if len(cleaned) < FULLTEXT_MIN_CHARS:
-        raise ValueError(f"正文提取结果不足 {FULLTEXT_MIN_CHARS} 字符")
+        raise ValueError(f"Extracted full text is under {FULLTEXT_MIN_CHARS} characters")
     return cleaned
 
 
@@ -282,10 +282,10 @@ def fetch_and_rescore_fulltext(
         "comparisons": comparisons,
     }
     print(
-        "选择性正文抓取完成："
-        f"候选 {result['selected_count']}，成功 {result['success_count']}，失败 {result['failed_count']}，"
-        f"缓存恢复 {result['restored_from_cache_count']}，重评分 {result['rescored_count']}，"
-        f"耗时 {result['elapsed_seconds']:.1f} 秒。"
+        "Selective full-text fetch complete: "
+        f"{result['selected_count']} candidates, {result['success_count']} succeeded, {result['failed_count']} failed, "
+        f"{result['restored_from_cache_count']} restored from cache, {result['rescored_count']} rescored, "
+        f"took {result['elapsed_seconds']:.1f}s."
     )
     return result
 

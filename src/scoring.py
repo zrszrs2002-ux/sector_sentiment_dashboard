@@ -192,7 +192,7 @@ def calculate_risk_intensity(
     elif RISK_COMBINE == "noisy_or":
         combined_risk = 1.0 - math.prod(1.0 - probability for probability in risk_probabilities)
     else:
-        raise ValueError(f"不支持的 RISK_COMBINE：{RISK_COMBINE}")
+        raise ValueError(f"Unsupported RISK_COMBINE: {RISK_COMBINE}")
     severity_score = 100 * combined_risk
     if not RISK_USE_SENTIMENT_PRESSURE:
         return clamp(severity_score)

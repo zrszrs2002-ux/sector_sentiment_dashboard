@@ -161,7 +161,7 @@ class SensitivityAnalysisTests(unittest.TestCase):
         )
 
     def test_compute_rejects_demo_data_source(self) -> None:
-        with self.assertRaisesRegex(ValueError, "严禁使用 Demo 数据"):
+        with self.assertRaisesRegex(ValueError, "Demo data is strictly forbidden"):
             compute_sensitivity_analysis(
                 self.articles,
                 data_source="processed_articles.csv",

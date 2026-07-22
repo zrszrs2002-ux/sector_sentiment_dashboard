@@ -21,19 +21,19 @@ def normalized_weight_score(weights: pd.Series) -> pd.Series:
     return clean_weights / max_weight * 100
 
 
-# 驱动理由文案统一在此维护（面向用户的语言，不出现内部实现细节）。
+# Driver reason copy is maintained here in one place (user-facing language, no internal detail).
 def driver_reason(row: pd.Series) -> str:
     if str(row.get("sector", "")) == "Unmapped":
-        return "宏观/市场级新闻：影响整体市场情绪解读，不属于单一板块。"
+        return "Macro/market-level news: shapes overall market sentiment and isn't tied to a single sector."
     if float(row.get("risk_intensity", 0)) >= 70:
-        return "包含明确的高强度风险因素，可能对板块情绪造成压力。"
+        return "Contains a clear high-intensity risk factor that may pressure sector sentiment."
     if abs(float(row.get("sentiment_score", 0))) >= 0.25:
-        return "情绪方向明显，可能推动乐观或恐惧指标。"
-    return "综合风险、情绪与关注信号后排名靠前。"
+        return "Sentiment direction is pronounced, which may drive the optimism or fear metrics."
+    return "Ranked highly after combining risk, sentiment, and attention signals."
 
 
 def coverage_reason(source_count: int) -> str:
-    return f"获 {int(source_count)} 家媒体共同报道，重要性上调。"
+    return f"Covered jointly by {int(source_count)} outlets, so its importance was boosted."
 
 
 def add_driver_scores(df: pd.DataFrame) -> pd.DataFrame:
@@ -150,7 +150,7 @@ def event_driver_rows(df: pd.DataFrame) -> pd.DataFrame:
 def _utc_timestamp(value: object | None) -> pd.Timestamp:
     timestamp = pd.Timestamp.now(tz="UTC") if value is None else pd.Timestamp(value)
     if pd.isna(timestamp):
-        raise ValueError("Top Drivers 的参考时间无效。")
+        raise ValueError("Invalid reference time for Top Drivers.")
     return timestamp.tz_localize("UTC") if timestamp.tzinfo is None else timestamp.tz_convert("UTC")
 
 

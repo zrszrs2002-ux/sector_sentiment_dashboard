@@ -220,21 +220,21 @@ def _build_embedding_index(texts: list[str]) -> EmbeddingSimilarityIndex:
 def build_similarity_index(texts: list[str], engine: str | None = None) -> SimilarityBuild:
     requested = str(engine or EVENT_SIMILARITY_ENGINE).strip().lower()
     if requested == "lexical":
-        print("当前事件聚类引擎：lexical（内容词 Jaccard）。")
+        print("Current event clustering engine: lexical (content-word Jaccard).")
         return SimilarityBuild(LexicalSimilarityIndex(texts), requested, "lexical", "cpu")
     if requested != "embedding":
-        reason = f"未知事件相似度引擎 {requested!r}"
-        print(f"{reason}，已回退 lexical。")
+        reason = f"Unknown event similarity engine {requested!r}"
+        print(f"{reason}; fell back to lexical.")
         return SimilarityBuild(LexicalSimilarityIndex(texts), requested, "lexical", "cpu", reason)
 
     try:
         index = _build_embedding_index(texts)
     except Exception as exc:  # noqa: BLE001 - optional model must not break the pipeline
         reason = f"{type(exc).__name__}: {exc}"[:300]
-        print(f"事件 embedding 模型不可用，已回退 lexical：{reason}")
+        print(f"Event embedding model unavailable, fell back to lexical: {reason}")
         return SimilarityBuild(LexicalSimilarityIndex(texts), requested, "lexical", "cpu", reason)
 
-    print(f"当前事件聚类引擎：embedding ({index.device})，模型 {EVENT_EMBED_MODEL_NAME}。")
+    print(f"Current event clustering engine: embedding ({index.device}), model {EVENT_EMBED_MODEL_NAME}.")
     return SimilarityBuild(index, requested, "embedding", index.device)
 
 
@@ -428,7 +428,7 @@ def _cluster_records(
                 if union_find.union(left, right, max_span_hours=EVENT_MAX_SPAN_HOURS):
                     matched_pair_count += 1
     else:
-        print("事件聚类候选对为 0，无需计算文本向量。")
+        print("0 event clustering candidate pairs; no need to compute text vectors.")
 
     _assign_cluster_fields(clustered, union_find)
     return ClusterResult(
@@ -463,7 +463,7 @@ def cluster_articles_incremental(
     """
     combined = [dict(record) for record in existing_records + new_records]
     if existing_records and not all(str(record.get("event_id", "")).strip() for record in existing_records):
-        print("检测到历史 processed 数据缺少 event_id，本次执行一次全量事件聚类迁移。")
+        print("Detected historical processed data missing event_id; running a one-time full event-clustering migration.")
         return cluster_articles(combined, engine=engine)
     return _cluster_records(combined, engine=engine, existing_count=len(existing_records))
 
@@ -503,19 +503,19 @@ def cluster_csv(path: Path, engine: str | None = None, write: bool = True) -> Cl
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="为 processed 新闻计算事件级聚类。")
+    parser = argparse.ArgumentParser(description="Compute event-level clustering for processed news.")
     parser.add_argument("--input", type=Path, default=REAL_PROCESSED_ARTICLES_PATH)
     parser.add_argument("--engine", choices=["embedding", "lexical"], default=EVENT_SIMILARITY_ENGINE)
-    parser.add_argument("--dry-run", action="store_true", help="只计算和汇报，不写回 CSV")
+    parser.add_argument("--dry-run", action="store_true", help="Only compute and report, without writing back to CSV")
     args = parser.parse_args()
 
     result = cluster_csv(args.input, engine=args.engine, write=not args.dry_run)
     summary = clustering_summary(result.records)
     print(
-        "事件聚类完成："
-        f"请求引擎 {result.info.requested_engine}，实际引擎 {result.info.used_engine}，"
-        f"文章 {summary['article_count']}，事件簇 {summary['cluster_count']}，"
-        f"多篇簇 {summary['multi_article_cluster_count']}，最大簇 {summary['largest_cluster_size']} 篇。"
+        "Event clustering complete: "
+        f"requested engine {result.info.requested_engine}, actual engine {result.info.used_engine}, "
+        f"{summary['article_count']} articles, {summary['cluster_count']} event clusters, "
+        f"{summary['multi_article_cluster_count']} multi-article clusters, largest cluster {summary['largest_cluster_size']} articles."
     )
 
 

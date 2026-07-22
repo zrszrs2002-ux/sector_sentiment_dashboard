@@ -2,24 +2,29 @@ import pandas as pd
 import streamlit as st
 
 from src.driver_analysis import collapse_articles_by_event
-from src.ui_helpers import load_selected_articles, url_column_config
+from src.ui_helpers import (
+    load_selected_articles,
+    markdown_article_link,
+    sentiment_badge_markdown,
+    url_column_config,
+)
 
 
-st.title("文章浏览器")
-st.caption("当前显示已处理新闻；agg_weight 是聚合权重，不等同于板块级关注度。")
+st.title("Article Explorer")
+st.caption("Showing processed news. agg_weight is the aggregation weight and is not the same as sector-level attention.")
 
 option_col1, option_col2 = st.columns(2)
 with option_col1:
     load_all_history = st.checkbox(
-        "加载全部历史", value=False, help="默认仅加载近 30 天工作集；勾选后读取全部累计历史。"
+        "Load full history", value=False, help="Only the last-30-day working set loads by default; check this to read the full accumulated history."
     )
 with option_col2:
     group_by_event = st.checkbox(
-        "按事件分组", value=False, help="每个 event_id 只显示 agg_weight 最高的代表文章。"
+        "Group by event", value=False, help="Show only the highest agg_weight representative article per event_id."
     )
 
 df, source_mode = load_selected_articles(load_all_history=load_all_history)
-st.caption(f"当前数据源：{source_mode}")
+st.caption(f"Current data source: {source_mode}")
 
 valid_times = df["published_at"].dropna()
 time_filtered = df.copy()
@@ -27,7 +32,7 @@ if not valid_times.empty:
     min_date = valid_times.min().date()
     max_date = valid_times.max().date()
     selected_date_range = st.date_input(
-        "发布时间范围",
+        "Publish date range",
         value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date,
@@ -43,11 +48,12 @@ if not valid_times.empty:
         end_ts = start_ts + pd.Timedelta(days=1)
         time_filtered = df[(df["published_at"] >= start_ts) & (df["published_at"] < end_ts)].copy()
 
-NO_RISK_LABEL = "无风险"
+NO_RISK_LABEL = "No risk"
 
 
 def risk_set(value: object) -> frozenset[str]:
-    """risk_category 允许分号多标签和空值；空值归入"无风险"筛选项。"""
+    """risk_category allows semicolon-separated multi-labels and blanks; blanks fall
+    under the "No risk" filter option."""
     parts = frozenset(part.strip() for part in str(value or "").split(";") if part.strip())
     return parts if parts else frozenset({NO_RISK_LABEL})
 
@@ -60,15 +66,15 @@ risk_options = sorted(set().union(*time_filtered["_risk_set"]) if len(time_filte
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    selected_sources = st.multiselect("新闻源", source_options, default=source_options)
+    selected_sources = st.multiselect("News source", source_options, default=source_options)
 with col2:
-    selected_sectors = st.multiselect("板块", sector_options, default=sector_options)
+    selected_sectors = st.multiselect("Sector", sector_options, default=sector_options)
 with col3:
-    selected_risks = st.multiselect("风险类别", risk_options, default=risk_options)
+    selected_risks = st.multiselect("Risk category", risk_options, default=risk_options)
 
 sort_mode = st.radio(
-    "排序方式",
-    ["sentiment_score 从高到低", "sentiment_score 从低到高", "risk_intensity 从高到低"],
+    "Sort by",
+    ["sentiment_score: high to low", "sentiment_score: low to high", "risk_intensity: high to low"],
     horizontal=True,
 )
 
@@ -82,21 +88,24 @@ filtered_articles = filtered_articles.drop(columns=["_risk_set"])
 
 filtered = collapse_articles_by_event(filtered_articles) if group_by_event else filtered_articles
 
-if sort_mode == "sentiment_score 从高到低":
+if sort_mode == "sentiment_score: high to low":
     filtered = filtered.sort_values("sentiment_score", ascending=False)
-elif sort_mode == "sentiment_score 从低到高":
+elif sort_mode == "sentiment_score: low to high":
     filtered = filtered.sort_values("sentiment_score", ascending=True)
 else:
     filtered = filtered.sort_values("risk_intensity", ascending=False)
 
-display_columns = [
-    "title",
+metric_label = "Events after filtering" if group_by_event else "Articles after filtering"
+st.metric(metric_label, len(filtered))
+if group_by_event:
+    st.caption(f"These events contain {len(filtered_articles)} individual articles in total; grouping only affects display.")
+
+detail_columns = [
     "event_id",
     "source",
     "publisher",
     "source_count",
     "published_at",
-    "sector",
     "topic",
     "tickers",
     "sentiment_score",
@@ -107,30 +116,69 @@ display_columns = [
     "source_weight",
     "content_level",
     "rescored",
-    "risk_category",
     "risk_intensity",
     "evidence_sentence",
-    "url",
 ]
 if group_by_event:
-    display_columns.insert(2, "event_article_count")
-
-metric_label = "筛选后事件数量" if group_by_event else "筛选后新闻数量"
-st.metric(metric_label, len(filtered))
-if group_by_event:
-    st.caption(f"这些事件共包含 {len(filtered_articles)} 篇独立新闻；分组仅影响展示。")
-number_column_config = {
-    "sentiment_score": st.column_config.NumberColumn(format="%.3f"),
-    "optimism": st.column_config.NumberColumn(format="%.1f"),
-    "fear": st.column_config.NumberColumn(format="%.1f"),
-    "uncertainty": st.column_config.NumberColumn(format="%.1f"),
-    "risk_intensity": st.column_config.NumberColumn(format="%.1f"),
-    "agg_weight": st.column_config.NumberColumn(format="%.4f"),
-    "source_weight": st.column_config.NumberColumn(format="%.2f"),
+    detail_columns.insert(1, "event_article_count")
+detail_number_format = {
+    "sentiment_score": "{:.3f}",
+    "optimism": "{:.1f}",
+    "fear": "{:.1f}",
+    "uncertainty": "{:.1f}",
+    "risk_intensity": "{:.1f}",
+    "agg_weight": "{:.4f}",
+    "source_weight": "{:.2f}",
 }
-st.dataframe(
-    filtered[display_columns],
-    use_container_width=True,
-    hide_index=True,
-    column_config={**url_column_config(), **number_column_config},
+
+view_mode = st.radio(
+    "Result view",
+    ["Card view (clickable titles)", "Full table"],
+    horizontal=True,
+    key="article_explorer_view_mode",
 )
+
+if view_mode == "Card view (clickable titles)":
+    max_cards = 50
+    cards_to_show = filtered.head(max_cards)
+    if len(filtered) > max_cards:
+        st.caption(f"{len(filtered)} total; card view shows the first {max_cards}. To see everything, switch to \u201cFull table\u201d or narrow down with the filters.")
+    for _, row in cards_to_show.iterrows():
+        with st.container(border=True):
+            st.markdown(f"##### {markdown_article_link(row.get('title'), row.get('url'))}")
+            badge_col1, badge_col2, badge_col3 = st.columns([1, 1, 1.4])
+            with badge_col1:
+                st.markdown(f"\U0001f3f7\ufe0f **Sector** \u00b7 {row.get('sector', '') or 'Unmapped'}")
+            with badge_col2:
+                risk_label = str(row.get("risk_category") or "") or NO_RISK_LABEL
+                st.markdown(f"\u26a0\ufe0f **Risk category** \u00b7 {risk_label}")
+            with badge_col3:
+                st.markdown(sentiment_badge_markdown(row.get("sentiment_score")), unsafe_allow_html=True)
+            with st.expander("View all fields"):
+                for column in detail_columns:
+                    if column not in row:
+                        continue
+                    value = row.get(column)
+                    if column in detail_number_format:
+                        try:
+                            value = detail_number_format[column].format(float(value))
+                        except (TypeError, ValueError):
+                            pass
+                    st.write(f"**{column}**: {value}")
+else:
+    display_columns = ["title", "sector", "risk_category", *detail_columns, "url"]
+    number_column_config = {
+        "sentiment_score": st.column_config.NumberColumn(format="%.3f"),
+        "optimism": st.column_config.NumberColumn(format="%.1f"),
+        "fear": st.column_config.NumberColumn(format="%.1f"),
+        "uncertainty": st.column_config.NumberColumn(format="%.1f"),
+        "risk_intensity": st.column_config.NumberColumn(format="%.1f"),
+        "agg_weight": st.column_config.NumberColumn(format="%.4f"),
+        "source_weight": st.column_config.NumberColumn(format="%.2f"),
+    }
+    st.dataframe(
+        filtered[display_columns],
+        use_container_width=True,
+        hide_index=True,
+        column_config={**url_column_config(), **number_column_config},
+    )

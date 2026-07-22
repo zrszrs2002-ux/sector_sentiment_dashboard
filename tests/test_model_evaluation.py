@@ -121,8 +121,8 @@ class ModelEvaluationTests(unittest.TestCase):
             self.assertFalse((root / "backups").exists())
 
         finbert = result["sentiment_reports"]["FinBERT"]
-        neutral = result["sentiment_reports"]["全中性基线"]
-        lexicon = result["sentiment_reports"]["词典引擎"]
+        neutral = result["sentiment_reports"]["All-neutral baseline"]
+        lexicon = result["sentiment_reports"]["Lexicon engine"]
         self.assertAlmostEqual(finbert["accuracy"], 0.8)
         self.assertAlmostEqual(finbert["macro_f1"], 0.8)
         self.assertEqual(finbert["confusion_matrix"].loc["negative", "neutral"], 2)

@@ -67,7 +67,7 @@ class FinbertResources:
 
 
 _FALLBACK_NOTICE_SHOWN = False
-FINBERT_DOWNLOAD_MESSAGE = "首次启动正在下载 FinBERT 模型（约 440MB），请稍候…"
+FINBERT_DOWNLOAD_MESSAGE = "Downloading the FinBERT model on first startup (about 440MB), please wait…"
 
 
 @lru_cache(maxsize=1)
@@ -101,9 +101,9 @@ def build_label_to_index(id2label: dict[Any, Any]) -> dict[str, int]:
 
     missing_labels = EXPECTED_FINBERT_LABELS - set(label_to_index)
     if missing_labels:
-        raise ValueError(f"FinBERT 标签映射缺失: {sorted(missing_labels)}; id2label={id2label}")
+        raise ValueError(f"FinBERT label mapping is missing: {sorted(missing_labels)}; id2label={id2label}")
     if len(set(label_to_index.values())) != len(EXPECTED_FINBERT_LABELS):
-        raise ValueError(f"FinBERT 标签映射索引重复: {label_to_index}")
+        raise ValueError(f"FinBERT label mapping has duplicate indices: {label_to_index}")
     return label_to_index
 
 
@@ -115,7 +115,7 @@ def validate_label_mapping(label_to_index: dict[str, int], id2label: dict[Any, A
     test_probabilities[label_to_index["neutral"]] = 0.1
     p_positive, p_neutral, p_negative = probabilities_from_finbert(label_to_index, test_probabilities)
     if (p_positive, p_neutral, p_negative) != (0.7, 0.1, 0.2):
-        raise ValueError(f"FinBERT 标签映射测试失败: id2label={id2label}; map={label_to_index}")
+        raise ValueError(f"FinBERT label mapping self-test failed: id2label={id2label}; map={label_to_index}")
 
 
 def resolve_device(torch_module: Any) -> str:
@@ -124,11 +124,11 @@ def resolve_device(torch_module: Any) -> str:
         return "cuda" if torch_module.cuda.is_available() else "cpu"
     if configured_device == "cuda":
         if not torch_module.cuda.is_available():
-            raise RuntimeError("配置 SENTIMENT_DEVICE=cuda，但当前 torch.cuda.is_available() 为 False")
+            raise RuntimeError("SENTIMENT_DEVICE=cuda is configured, but torch.cuda.is_available() is currently False")
         return "cuda"
     if configured_device == "cpu":
         return "cpu"
-    raise ValueError("SENTIMENT_DEVICE 只能是 auto/cuda/cpu")
+    raise ValueError("SENTIMENT_DEVICE must be one of auto/cuda/cpu")
 
 
 def pretrained_kwargs(local_files_only: bool) -> dict[str, Any]:
@@ -180,7 +180,7 @@ def load_cached_or_download(auto_tokenizer: Any, auto_model: Any) -> tuple[Any, 
         if not is_cache_miss_error(cache_exc):
             raise
         if get_finbert_loading_mode() == "offline":
-            raise RuntimeError("FinBERT 缓存未命中，且 FINBERT_LOCAL_FILES_ONLY=1 已启用严格离线模式。") from cache_exc
+            raise RuntimeError("FinBERT cache miss, and FINBERT_LOCAL_FILES_ONLY=1 has strict offline mode enabled.") from cache_exc
         with finbert_download_context():
             return load_pretrained_pair(auto_tokenizer, auto_model, local_files_only=False)
 
@@ -194,7 +194,7 @@ def load_finbert_resources() -> FinbertResources:
             torch_module=None,
             device="lexicon",
             label_to_index={},
-            status_message="当前情绪引擎：词典 fallback。FinBERT 未在配置中启用。",
+            status_message="Current sentiment engine: lexicon fallback. FinBERT is not enabled in config.",
         )
 
     try:
@@ -207,7 +207,7 @@ def load_finbert_resources() -> FinbertResources:
             torch_module=None,
             device="lexicon",
             label_to_index={},
-            status_message=f"当前情绪引擎：词典 fallback。FinBERT 依赖不可用（{exc}）。",
+            status_message=f"Current sentiment engine: lexicon fallback. FinBERT dependency unavailable ({exc}).",
         )
 
     try:
@@ -224,7 +224,7 @@ def load_finbert_resources() -> FinbertResources:
             torch_module=None,
             device="lexicon",
             label_to_index={},
-            status_message=f"当前情绪引擎：词典 fallback。FinBERT 不可用（{exc}）。",
+            status_message=f"Current sentiment engine: lexicon fallback. FinBERT unavailable ({exc}).",
         )
 
     return FinbertResources(
@@ -233,7 +233,7 @@ def load_finbert_resources() -> FinbertResources:
         torch_module=torch,
         device=device,
         label_to_index=label_to_index,
-        status_message=f"当前情绪引擎：FinBERT ({device})",
+        status_message=f"Current sentiment engine: FinBERT ({device})",
     )
 
 
@@ -262,7 +262,7 @@ def notice_finbert_fallback_once(message: str) -> None:
     if _FALLBACK_NOTICE_SHOWN:
         return
     _FALLBACK_NOTICE_SHOWN = True
-    print(f"提示：{message}")
+    print(f"Notice: {message}")
 
 
 def probabilities_from_finbert(label_to_index: dict[str, int], probabilities: list[float]) -> tuple[float, float, float]:
@@ -313,7 +313,7 @@ def score_sentences_finbert(sentences: list[str]) -> list[SentenceSentiment] | N
                 for sentence, probabilities in zip(batch_sentences, batch_probabilities, strict=True)
             )
     except Exception as exc:  # noqa: BLE001 - 批量推理失败时整批回退词典模型
-        notice_finbert_fallback_once(f"FinBERT 推理失败（{exc}），已回退到词典情绪模型。")
+        notice_finbert_fallback_once(f"FinBERT inference failed ({exc}); fell back to the lexicon sentiment model.")
         return None
 
     return results

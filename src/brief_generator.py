@@ -69,7 +69,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def _resolve_source(source_mode: str) -> tuple[str, object]:
     df = load_articles(source_mode=source_mode, load_all_history=True)
     if df.empty and source_mode == REAL_DATA_LABEL:
-        print("真实新闻数据为空，简报生成回落到 Demo 数据。")
+        print("Real news data is empty; brief generation fell back to Demo data.")
         return DEMO_DATA_LABEL, load_articles(source_mode=DEMO_DATA_LABEL, load_all_history=True)
     return source_mode, df
 
@@ -80,18 +80,18 @@ def generate_daily_brief(source_mode: str = REAL_DATA_LABEL, force: bool = False
     scheduled_time = now_local.replace(hour=BRIEF_GENERATION_HOUR_LOCAL, minute=0, second=0, microsecond=0)
 
     if not force and now_local < scheduled_time:
-        message = f"尚未到今日简报生成时间 {BRIEF_GENERATION_HOUR_LOCAL}:00，跳过生成。"
+        message = f"It is not yet today's brief generation time ({BRIEF_GENERATION_HOUR_LOCAL}:00); skipping."
         print(message)
         return {"status": "skipped", "message": message}
 
     if not force and _latest_generated_for_date(brief_date):
-        message = "今日简报已生成，跳过；抓取与简报生成保持解耦。"
+        message = "Today's brief has already been generated; skipping. Fetching and brief generation stay decoupled."
         print(message)
         return {"status": "skipped", "message": message}
 
     resolved_source, df = _resolve_source(source_mode)
     if getattr(df, "empty", True):
-        message = "没有可用于简报的数据，已跳过生成。"
+        message = "No data available for the brief; generation skipped."
         print(message)
         return {"status": "skipped", "message": message}
 
@@ -104,7 +104,7 @@ def generate_daily_brief(source_mode: str = REAL_DATA_LABEL, force: bool = False
         "data_window_start": payload["data_window"]["start"],
         "data_window_end": payload["data_window"]["end"],
         "data_snapshot_id": payload["snapshot_id"],
-        "summary_source": result.get("source", "规则模板"),
+        "summary_source": result.get("source", "Rule template"),
         "data_source": resolved_source,
     }
     if result.get("model_id"):
@@ -115,7 +115,7 @@ def generate_daily_brief(source_mode: str = REAL_DATA_LABEL, force: bool = False
         metadata["fallback_reason"] = result["error"]
 
     _write_brief(result["content"], metadata)
-    message = f"每日市场简报已生成：{metadata['summary_source']}，日期 {brief_date}。"
+    message = f"Daily market brief generated: {metadata['summary_source']}, date {brief_date}."
     print(message)
     return {
         "status": "generated",

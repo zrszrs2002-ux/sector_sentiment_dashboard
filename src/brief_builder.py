@@ -136,13 +136,13 @@ def _seven_day_positions(
         lower_days = int((values < current_value).sum())
         higher_days = int((values > current_value).sum())
         if lower_days == 0 and higher_days == 0:
-            labels[metric] = "与近 7 日水平基本持平"
+            labels[metric] = "roughly flat vs. the last 7 days"
         elif lower_days == 0:
-            labels[metric] = "未高于近 7 日中的任何一天"
+            labels[metric] = "not higher than any of the last 7 days"
         elif lower_days == 7:
-            labels[metric] = "高于近 7 日全部 7 天"
+            labels[metric] = "higher than all of the last 7 days"
         else:
-            labels[metric] = f"高于近 7 日中 {lower_days} 天"
+            labels[metric] = f"higher than {lower_days} of the last 7 days"
     return labels
 
 
@@ -260,7 +260,7 @@ def _sector_sentiment_counts(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 def _display_sector(value: object) -> str:
     sector = str(value or "").strip()
-    return "宏观/市场" if sector in {"", "Unmapped"} else sector
+    return "Macro/Market" if sector in {"", "Unmapped"} else sector
 
 
 def _sentiment_news_rows(df: pd.DataFrame, positive: bool) -> list[dict[str, str]]:

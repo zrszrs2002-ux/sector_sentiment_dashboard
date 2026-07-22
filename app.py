@@ -20,7 +20,7 @@ def bridge_streamlit_secrets() -> None:
 bridge_streamlit_secrets()
 
 st.set_page_config(
-    page_title="自动化板块级金融舆情雷达系统",
+    page_title="Automated Sector Financial Sentiment Radar",
     layout="wide",
 )
 
@@ -33,8 +33,8 @@ from src.sentiment_model import sentiment_backend_status
 
 BASE_DIR = Path(__file__).resolve().parent
 
-st.sidebar.title("板块级金融舆情雷达")
-st.sidebar.caption("公开财经新闻舆情监测工具")
+st.sidebar.title("Sector Financial Sentiment Radar")
+st.sidebar.caption("Public financial news sentiment monitoring tool")
 st.sidebar.info(DISCLAIMER)
 st.sidebar.caption(sentiment_backend_status())
 
@@ -47,94 +47,101 @@ if st.session_state["data_source_mode"] not in source_options:
 if not real_available and st.session_state["data_source_mode"] == REAL_DATA_LABEL:
     st.session_state["data_source_mode"] = DEMO_DATA_LABEL
 if not real_available:
-    st.sidebar.warning("真实新闻数据为空或不可读，已默认使用 Demo 数据。请点击“抓取最新新闻”后切换真实新闻。")
+    st.sidebar.warning(
+        "Real news data is empty or unreadable, so Demo data is used by default. "
+        "Click \u201cFetch latest news\u201d and then switch to real news."
+    )
 
 st.sidebar.radio(
-    "数据源",
+    "Data source",
     source_options,
     index=source_options.index(st.session_state["data_source_mode"]),
     key="data_source_mode",
-    help="真实新闻来自 RSS，是主要数据源；Demo 数据仅用于离线兜底和测试。",
+    help="Real news comes from RSS and is the primary data source; Demo data is only "
+    "for offline fallback and testing.",
 )
 
-if st.sidebar.button("抓取最新新闻", type="primary"):
-    with st.spinner("正在抓取 RSS 新闻并刷新真实新闻数据..."):
+if st.sidebar.button("Fetch latest news", type="primary"):
+    with st.spinner("Fetching RSS news and refreshing real news data..."):
         try:
             result = collect_rss_news()
-        except Exception as exc:  # noqa: BLE001 - UI 层需要给中文错误提示
-            st.sidebar.error(f"RSS 抓取失败：{exc}")
+        except Exception as exc:  # noqa: BLE001 - UI layer needs a readable error message
+            st.sidebar.error(f"RSS fetch failed: {exc}")
         else:
             if result["all_failed"] and result["processed_count"] == 0:
                 st.sidebar.warning(result["message"])
             else:
                 st.sidebar.success(
-                    "抓取完成："
-                    f"新增 {result['new_record_count']} 条，"
-                    f"合并重复语境 {result['merged_context_count']} 条，"
-                    f"真实新闻累计 {result['processed_count']} 条。"
+                    "Fetch complete: "
+                    f"{result['new_record_count']} new, "
+                    f"{result['merged_context_count']} merged duplicate contexts, "
+                    f"{result['processed_count']} real news articles in total."
                 )
             if result["failures"]:
-                with st.sidebar.expander("部分 RSS 源失败"):
+                with st.sidebar.expander("Some RSS sources failed"):
                     for failure in result["failures"][:8]:
                         st.write(f"{failure['source']}: {failure['error']}")
             if result.get("brief_result"):
-                st.sidebar.caption(f"简报门闸：{result['brief_result'].get('message', '')}")
+                st.sidebar.caption(f"Brief gate: {result['brief_result'].get('message', '')}")
             if result.get("raw_size_warning"):
                 st.sidebar.warning(result["raw_size_warning"])
 
-if st.sidebar.button("立即重新生成简报"):
+if st.sidebar.button("Regenerate brief now"):
     st.session_state["confirm_force_brief"] = True
 
 if st.session_state.get("confirm_force_brief"):
-    st.sidebar.warning("确认后会无视每日门闸并调用简报生成流程；若 OPENAI_API_KEY 可用，可能产生 API 费用。")
+    st.sidebar.warning(
+        "Confirming will bypass the daily gate and call the brief generation pipeline; "
+        "if OPENAI_API_KEY is available this may incur API costs."
+    )
     demo_pin = get_demo_pin()
     pin_matches = True
     if demo_pin:
-        entered_pin = st.sidebar.text_input("访问口令", type="password", key="force_brief_pin")
+        entered_pin = st.sidebar.text_input("Access PIN", type="password", key="force_brief_pin")
         pin_matches = hmac.compare_digest(entered_pin, demo_pin)
-    if st.sidebar.button("确认生成（可能产生费用）"):
+    if st.sidebar.button("Confirm generation (may incur costs)"):
         if demo_pin and not pin_matches:
-            st.sidebar.error("访问口令不正确，未调用简报生成接口。")
+            st.sidebar.error("Incorrect access PIN; brief generation was not called.")
         else:
-            with st.spinner("正在重新生成每日市场简报..."):
+            with st.spinner("Regenerating the daily market brief..."):
                 result = generate_daily_brief(
                     source_mode=st.session_state.get("data_source_mode", REAL_DATA_LABEL),
                     force=True,
                 )
             st.session_state["confirm_force_brief"] = False
             if result.get("status") == "generated":
-                st.sidebar.success(result.get("message", "简报已生成。"))
+                st.sidebar.success(result.get("message", "Brief generated."))
             else:
-                st.sidebar.warning(result.get("message", "简报未生成。"))
-    if st.sidebar.button("取消重新生成"):
+                st.sidebar.warning(result.get("message", "Brief was not generated."))
+    if st.sidebar.button("Cancel regeneration"):
         st.session_state["confirm_force_brief"] = False
 
 pages = {
-    "核心仪表盘": [
+    "Core Dashboard": [
         st.Page(
             BASE_DIR / "pages" / "1_Market_Overview.py",
-            title="市场总览",
+            title="Market Overview",
             icon=":material/dashboard:",
             default=True,
         ),
         st.Page(
             BASE_DIR / "pages" / "2_Sector_Comparison.py",
-            title="板块比较",
+            title="Sector Comparison",
             icon=":material/analytics:",
         ),
         st.Page(
             BASE_DIR / "pages" / "3_Sector_Detail.py",
-            title="板块详情",
+            title="Sector Detail",
             icon=":material/troubleshoot:",
         ),
         st.Page(
             BASE_DIR / "pages" / "4_Article_Explorer.py",
-            title="文章浏览器",
+            title="Article Explorer",
             icon=":material/article:",
         ),
         st.Page(
             BASE_DIR / "pages" / "5_Evaluation.py",
-            title="评估",
+            title="Evaluation",
             icon=":material/fact_check:",
         ),
     ],

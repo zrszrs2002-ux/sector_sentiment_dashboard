@@ -35,7 +35,7 @@ def load_rss_sources() -> list[RssSource]:
     try:
         payload = json.loads(RSS_SOURCES_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"RSS 源配置读取失败：{exc}") from exc
+        raise RuntimeError(f"Failed to read RSS source config: {exc}") from exc
 
     sources: list[RssSource] = []
     for index, item in enumerate(payload.get("sources", []), start=1):
@@ -50,11 +50,11 @@ def load_rss_sources() -> list[RssSource]:
                 fulltext_allowed=bool(item.get("fulltext_allowed", True)),
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError(f"RSS 源配置第 {index} 项无效：{exc}") from exc
+            raise RuntimeError(f"RSS source config item {index} is invalid: {exc}") from exc
         if not source.name or not source.url or source.kind not in {"ticker_template", "market"}:
-            raise RuntimeError(f"RSS 源配置第 {index} 项缺少名称/URL，或 kind 非法。")
+            raise RuntimeError(f"RSS source config item {index} is missing a name/URL, or has an invalid kind.")
         if not 0 < source.source_weight <= 1:
-            raise RuntimeError(f"RSS 源 {source.name} 的 source_weight 必须在 (0, 1]。")
+            raise RuntimeError(f"RSS source {source.name}'s source_weight must be in (0, 1].")
         sources.append(source)
     return sources
 

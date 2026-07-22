@@ -61,13 +61,13 @@ def excel_hyperlink_formula(url: object) -> str:
     if not value.lower().startswith(("https://", "http://")):
         return value
     escaped_url = value.replace('"', '""')
-    return f'=HYPERLINK("{escaped_url}","打开原文")'
+    return f'=HYPERLINK("{escaped_url}","Open article")'
 
 
 def annotation_article_id_sha256(frame: pd.DataFrame) -> str:
     """Return an ordered article-id fingerprint for the persisted blind sample."""
     if "article_id" not in frame.columns:
-        raise ValueError("盲标样本缺少 article_id，无法生成批次指纹。")
+        raise ValueError("Blind sample is missing article_id; cannot generate a batch fingerprint.")
     article_ids = frame["article_id"].fillna("").astype(str)
     payload = "\n".join(article_ids).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
@@ -135,11 +135,11 @@ def annotation_metadata_matches_blind(
 
 def read_required_csv(path: Path, required_columns: set[str]) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
-        raise FileNotFoundError(f"文件不存在或为空：{path}")
+        raise FileNotFoundError(f"File does not exist or is empty: {path}")
     frame = pd.read_csv(path, encoding="utf-8-sig")
     missing = sorted(required_columns - set(frame.columns))
     if missing:
-        raise ValueError(f"{path.name} 缺少字段：{missing}")
+        raise ValueError(f"{path.name} is missing fields: {missing}")
     return frame
 
 
@@ -227,7 +227,7 @@ def generate_annotation_samples(
         validate="one_to_one",
     )
     if candidates.empty:
-        raise ValueError("raw 与 processed 没有可按 article_id 对齐的新闻。")
+        raise ValueError("No news items in raw and processed could be aligned by article_id.")
 
     for column in PROBABILITY_COLUMNS.values():
         candidates[column] = pd.to_numeric(candidates[column], errors="coerce").fillna(0.0)
@@ -246,7 +246,7 @@ def generate_annotation_samples(
         blind[column] = ""
     blind = blind.reindex(columns=BLIND_FIELDS)
     if any("predict" in column.lower() for column in blind.columns):
-        raise AssertionError("盲标文件意外包含模型预测列。")
+        raise AssertionError("The blind annotation file unexpectedly contains model prediction columns.")
 
     key = sampled.copy()
     key["stratum_sector"] = key["predicted_sector"]

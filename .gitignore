@@ -9,5 +9,9 @@ env/
 .env
 *.env
 
+.claude/
+data/backups/
+data/evaluation/backups/
+
 .DS_Store
 Thumbs.db

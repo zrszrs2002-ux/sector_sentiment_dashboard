@@ -66,8 +66,8 @@ class FeedConfig:
 def require_dependencies() -> None:
     if feedparser is None or requests is None:
         raise RuntimeError(
-            "缺少 RSS 抓取依赖。请先运行 `pip install -r requirements.txt`，"
-            "确保 feedparser 和 requests 已安装。"
+            "Missing RSS fetch dependencies. Run `pip install -r requirements.txt` first "
+            "to make sure feedparser and requests are installed."
         )
 
 
@@ -225,7 +225,7 @@ def fetch_feed(feed_config: FeedConfig) -> tuple[list[dict[str, str]], str | Non
         response.raise_for_status()
         parsed_feed = feedparser.parse(response.content)
         if not parsed_feed.entries:
-            return [], "RSS 返回成功，但没有解析到新闻条目。"
+            return [], "RSS request succeeded, but no news entries were parsed."
 
         collected_at = utc_now_iso()
         records = [
@@ -382,7 +382,7 @@ def collect_rss_news(process: bool = True) -> dict[str, Any]:
     processed_count = 0
     incremental_new_count = 0
     reused_count = 0
-    brief_result: dict[str, str] = {"status": "skipped", "message": "未运行处理管线，跳过简报门闸。"}
+    brief_result: dict[str, str] = {"status": "skipped", "message": "Processing pipeline did not run; brief gate skipped."}
     fulltext_result: dict[str, Any] = {
         "selected_count": 0,
         "attempted_count": 0,
@@ -419,8 +419,8 @@ def collect_rss_news(process: bool = True) -> dict[str, Any]:
         raw_size_mb = RAW_ARTICLES_PATH.stat().st_size / (1024 * 1024)
         if raw_size_mb > RAW_SQLITE_WARNING_MB:
             raw_size_warning = (
-                f"raw_articles.csv 当前约 {raw_size_mb:.1f}MB，建议后续迁移到 SQLite；"
-                "本版本暂不自动迁移。"
+                f"raw_articles.csv is currently about {raw_size_mb:.1f}MB; migrating to SQLite is recommended down the line. "
+                "This version does not migrate automatically yet."
             )
             print(raw_size_warning)
 
@@ -450,72 +450,72 @@ def collect_rss_news(process: bool = True) -> dict[str, Any]:
         "publisher_top15": publisher_counts.most_common(15),
         "feed_elapsed_seconds": round(feed_elapsed_seconds, 3),
         "total_elapsed_seconds": round(perf_counter() - collection_started, 3),
-        "message": "全部 RSS 源抓取失败，已保留 demo 数据作为兜底。" if all_failed else "",
+        "message": "All RSS sources failed to fetch; demo data was kept as a fallback." if all_failed else "",
     }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="抓取 RSS 财经新闻并刷新真实新闻数据。")
-    parser.add_argument("--no-process", action="store_true", help="只更新 raw_articles.csv，不生成 real_processed_articles.csv")
+    parser = argparse.ArgumentParser(description="Fetch RSS financial news and refresh real news data.")
+    parser.add_argument("--no-process", action="store_true", help="Only update raw_articles.csv, without generating real_processed_articles.csv")
     args = parser.parse_args()
 
     try:
         result = collect_rss_news(process=not args.no_process)
     except RuntimeError as exc:
-        print(f"错误：{exc}", file=sys.stderr)
+        print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
     print(
-        "RSS 抓取完成："
-        f"feed 总数 {result['feed_count']}，"
-        f"成功 {result['successful_feed_count']}，"
-        f"失败 {result['failed_feed_count']}，"
-        f"本次解析 {result['fetched_count']} 条，"
-        f"新增 {result['new_record_count']} 条，"
-        f"合并重复语境 {result['merged_context_count']} 条，"
-        f"raw 累计 {result['raw_total_count']} 条，"
-        f"processed {result['processed_count']} 条。"
+        "RSS fetch complete: "
+        f"{result['feed_count']} feeds total, "
+        f"{result['successful_feed_count']} succeeded, "
+        f"{result['failed_feed_count']} failed, "
+        f"{result['fetched_count']} parsed this run, "
+        f"{result['new_record_count']} new, "
+        f"{result['merged_context_count']} merged duplicate contexts, "
+        f"{result['raw_total_count']} raw total, "
+        f"{result['processed_count']} processed."
     )
     if result["all_failed"]:
         print(result["message"])
-    print(f"增量处理：本次新增 {result['incremental_new_count']} 条，复用 {result['reused_count']} 条。")
+    print(f"Incremental processing: {result['incremental_new_count']} new this run, {result['reused_count']} reused.")
     if result.get("fulltext_result"):
         fulltext = result["fulltext_result"]
         print(
-            "正文抓取："
-            f"尝试 {fulltext.get('attempted_count', 0)}，成功 {fulltext.get('success_count', 0)}，"
-            f"失败 {fulltext.get('failed_count', 0)}，重评分 {fulltext.get('rescored_count', 0)}，"
-            f"耗时 {fulltext.get('elapsed_seconds', 0):.1f} 秒。"
+            "Full-text fetch: "
+            f"attempted {fulltext.get('attempted_count', 0)}, succeeded {fulltext.get('success_count', 0)}, "
+            f"failed {fulltext.get('failed_count', 0)}, rescored {fulltext.get('rescored_count', 0)}, "
+            f"took {fulltext.get('elapsed_seconds', 0):.1f}s."
         )
         for comparison in fulltext.get("comparisons", [])[:3]:
             print(
                 f"- {comparison.get('title', '')} | "
-                f"摘要 {comparison.get('summary_sentiment_score', 0):.3f} -> "
-                f"正文 {comparison.get('fulltext_sentiment_score', 0):.3f} | "
-                f"证据句：{comparison.get('fulltext_evidence_sentence', '')}"
+                f"summary {comparison.get('summary_sentiment_score', 0):.3f} -> "
+                f"full text {comparison.get('fulltext_sentiment_score', 0):.3f} | "
+                f"evidence: {comparison.get('fulltext_evidence_sentence', '')}"
             )
     if result.get("source_results"):
-        print("各源实测条数：")
+        print("Per-source counts:")
         for source_result in result["source_results"]:
             print(
-                f"- {source_result['source']}：{source_result['fetched_count']} 条 "
-                f"({source_result['successful_feeds']}/{source_result['feed_attempts']} feeds 成功)"
+                f"- {source_result['source']}: {source_result['fetched_count']} items "
+                f"({source_result['successful_feeds']}/{source_result['feed_attempts']} feeds succeeded)"
             )
     if result.get("publisher_top15"):
-        print("Publisher Top15：")
+        print("Publisher Top15:")
         for publisher, count in result["publisher_top15"]:
             print(f"- {publisher}: {count}")
     print(
-        f"耗时：RSS {result.get('feed_elapsed_seconds', 0):.1f} 秒，"
-        f"正文 {result.get('fulltext_result', {}).get('elapsed_seconds', 0):.1f} 秒，"
-        f"总计 {result.get('total_elapsed_seconds', 0):.1f} 秒。"
+        f"Elapsed: RSS {result.get('feed_elapsed_seconds', 0):.1f}s, "
+        f"full text {result.get('fulltext_result', {}).get('elapsed_seconds', 0):.1f}s, "
+        f"total {result.get('total_elapsed_seconds', 0):.1f}s."
     )
     if result.get("raw_size_warning"):
         print(result["raw_size_warning"])
     if result.get("brief_result"):
-        print(f"简报门闸：{result['brief_result'].get('message', '')}")
+        print(f"Brief gate: {result['brief_result'].get('message', '')}")
     if result["failures"]:
-        print("失败源摘要：")
+        print("Failed source summary:")
         for failure in result["failures"][:10]:
             print(f"- {failure['source']} | {failure['url']} | {failure['error']}")
 

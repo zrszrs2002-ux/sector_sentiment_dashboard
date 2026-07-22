@@ -31,18 +31,18 @@ def local_requirements() -> list[str]:
     return list(dict.fromkeys(dependencies))
 
 def run(command: list[str]) -> None:
-    print("执行：", " ".join(command))
+    print("Running:", " ".join(command))
     subprocess.run(command, check=True)
 
 def has_nvidia_gpu() -> bool:
     if shutil.which("nvidia-smi") is None:
-        print("未找到 nvidia-smi，将回退 CPU 安装。")
+        print("nvidia-smi not found; falling back to CPU install.")
         return False
     try:
         subprocess.run(["nvidia-smi"], check=True, capture_output=True, text=True, timeout=10)
         return True
     except Exception as exc:  # noqa: BLE001
-        print(f"GPU 探测失败：{exc}。将回退 CPU 安装。")
+        print(f"GPU detection failed: {exc}. Falling back to CPU install.")
         return False
 
 def installed_gpu_torch() -> bool:
@@ -54,7 +54,7 @@ def installed_gpu_torch() -> bool:
 
 def install_torch(use_gpu: bool) -> None:
     if installed_gpu_torch():
-        print("检测到已安装 GPU 版 torch，跳过安装，避免覆盖。")
+        print("Detected an already-installed GPU build of torch; skipping install to avoid overwriting it.")
         return
     index_url = CUDA_INDEX_URL if use_gpu else CPU_INDEX_URL
     version = TORCH_VERSION if use_gpu else f"{TORCH_VERSION}+cpu"
@@ -64,10 +64,10 @@ def self_check() -> None:
     torch = importlib.import_module("torch")
     cuda_available = bool(torch.cuda.is_available())
     device_name = torch.cuda.get_device_name(0) if cuda_available else "CPU"
-    print(f"torch 版本：{torch.__version__}")
-    print(f"CUDA 可用：{cuda_available}")
-    print(f"设备：{device_name}")
-    print(f"已启用 GPU 加速：{device_name}" if cuda_available else "未检测到 NVIDIA GPU，已安装 CPU 版本。")
+    print(f"torch version: {torch.__version__}")
+    print(f"CUDA available: {cuda_available}")
+    print(f"Device: {device_name}")
+    print(f"GPU acceleration enabled: {device_name}" if cuda_available else "No NVIDIA GPU detected; installed the CPU build.")
 
 def main() -> None:
     try:
@@ -76,7 +76,7 @@ def main() -> None:
         run([sys.executable, "-m", "pip", "install", f"transformers=={TRANSFORMERS_VERSION}"])
         self_check()
     except subprocess.CalledProcessError as exc:
-        raise SystemExit(f"安装失败：{exc}。请检查网络、pip 或 Python 环境后重试。") from exc
+        raise SystemExit(f"Install failed: {exc}. Check your network, pip, or Python environment, then retry.") from exc
 
 if __name__ == "__main__":
     main()

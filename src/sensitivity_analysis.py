@@ -83,12 +83,12 @@ def perturb_dimension_weights(
 ) -> dict[str, dict[str, float]]:
     """Perturb one component and renormalize only its dimension."""
     if dimension not in base_weights:
-        raise KeyError(f"未知敏感性分析维度：{dimension}")
+        raise KeyError(f"Unknown sensitivity analysis dimension: {dimension}")
     if component not in base_weights[dimension]:
-        raise KeyError(f"{dimension} 中不存在分量：{component}")
+        raise KeyError(f"Component not found in {dimension}: {component}")
     numeric_factor = float(factor)
     if not np.isfinite(numeric_factor) or numeric_factor < 0:
-        raise ValueError("扰动因子必须是有限的非负数。")
+        raise ValueError("The perturbation factor must be a finite, non-negative number.")
 
     adjusted = {
         name: {key: float(value) for key, value in components.items()}
@@ -101,7 +101,7 @@ def perturb_dimension_weights(
     target[component] *= numeric_factor
     total = float(sum(target.values()))
     if total <= 0:
-        raise ValueError(f"{dimension} 扰动后权重和必须大于 0。")
+        raise ValueError(f"The weight sum for {dimension} after perturbation must be greater than 0.")
     adjusted[dimension] = {
         name: float(value / total)
         for name, value in target.items()
@@ -112,7 +112,7 @@ def perturb_dimension_weights(
 def _prepare_articles(articles: pd.DataFrame) -> pd.DataFrame:
     missing = sorted(SENSITIVITY_REQUIRED_ARTICLE_COLUMNS.difference(articles.columns))
     if missing:
-        raise ValueError(f"真实新闻缺少敏感性分析字段：{missing}")
+        raise ValueError(f"Real news is missing sensitivity analysis fields: {missing}")
 
     prepared = articles.copy()
     prepared["published_at"] = pd.to_datetime(
@@ -122,7 +122,7 @@ def _prepare_articles(articles: pd.DataFrame) -> pd.DataFrame:
     prepared["sector"] = prepared["sector"].fillna("").astype(str)
     prepared = prepared[prepared["sector"].isin(SECTORS)].copy()
     if prepared.empty:
-        raise ValueError("真实新闻中没有可用于敏感性分析的目标板块记录。")
+        raise ValueError("No target sector records in real news are usable for sensitivity analysis.")
 
     numeric_columns = [
         "p_positive",
@@ -228,7 +228,7 @@ def stability_metrics(
         validate="one_to_one",
     )
     if merged.empty:
-        raise ValueError("默认与扰动结果没有可对齐的 sector-day 记录。")
+        raise ValueError("No sector-day records could be aligned between the default and perturbed results.")
 
     daily_spearman: list[float] = []
     daily_jaccard: list[float] = []
@@ -272,7 +272,7 @@ def compute_sensitivity_analysis(
     """Compute all OAT perturbations for the real-news enhanced formula."""
     if data_source != SENSITIVITY_DATA_SOURCE:
         raise ValueError(
-            "权重敏感性分析仅允许 real_processed_articles.csv，严禁使用 Demo 数据。"
+            "Weight sensitivity analysis only allows real_processed_articles.csv; Demo data is strictly forbidden."
         )
     timestamp = generated_at or datetime.now(UTC).isoformat(timespec="seconds")
     default_scores = recompute_sector_day_scores(articles, ENHANCED_WEIGHTS)
@@ -329,7 +329,7 @@ def persist_sensitivity_results(
         if field not in results.columns
     ]
     if missing:
-        raise ValueError(f"敏感性分析结果缺少字段：{missing}")
+        raise ValueError(f"Sensitivity analysis results are missing fields: {missing}")
     write_csv_atomic(
         output_path,
         SENSITIVITY_RESULT_FIELDS,
@@ -345,15 +345,15 @@ def load_sensitivity_results(
     try:
         results = pd.read_csv(path, encoding="utf-8-sig")
     except (OSError, EmptyDataError, ParserError, UnicodeDecodeError) as exc:
-        raise ValueError(f"敏感性分析结果读取失败：{exc}") from exc
+        raise ValueError(f"Failed to read sensitivity analysis results: {exc}") from exc
     missing = [
         field for field in SENSITIVITY_RESULT_FIELDS
         if field not in results.columns
     ]
     if missing:
-        raise ValueError(f"敏感性分析结果缺少字段：{missing}")
+        raise ValueError(f"Sensitivity analysis results are missing fields: {missing}")
     if not results["data_source"].astype(str).eq(SENSITIVITY_DATA_SOURCE).all():
-        raise ValueError("敏感性分析结果包含非真实新闻数据源，已拒绝加载。")
+        raise ValueError("Sensitivity analysis results contain a non-real-news data source; loading was refused.")
     for field in SENSITIVITY_NUMERIC_FIELDS:
         results[field] = pd.to_numeric(results[field], errors="coerce")
     return results[SENSITIVITY_RESULT_FIELDS].copy()
@@ -432,7 +432,7 @@ def run_sensitivity_analysis(
     articles = load_real_articles(load_all_history=True)
     if articles.empty:
         raise ValueError(
-            "real_processed_articles.csv 为空或不可读；敏感性分析不会回退 Demo 数据。"
+            "real_processed_articles.csv is empty or unreadable; sensitivity analysis will not fall back to Demo data."
         )
     results = compute_sensitivity_analysis(
         articles,

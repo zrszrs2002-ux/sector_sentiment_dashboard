@@ -254,8 +254,8 @@ def main() -> None:
     records = generate_demo_records()
     write_raw_demo(demo_path, records)
     processed = process_articles(demo_path, processed_path)
-    print(f"生成 demo 数据: {len(records)} 条")
-    print(f"生成 processed 数据: {len(processed)} 条")
+    print(f"Generated demo data: {len(records)} records")
+    print(f"Generated processed data: {len(processed)} records")
 
 
 if __name__ == "__main__":

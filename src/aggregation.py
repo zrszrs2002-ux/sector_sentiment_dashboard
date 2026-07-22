@@ -159,7 +159,7 @@ def disagreement_score(
         )
     if DISAGREEMENT_METHOD == "pairwise_distance":
         return 100 * weighted_pairwise_absolute_distance(sentiment_scores, weights)
-    raise ValueError(f"不支持的 DISAGREEMENT_METHOD：{DISAGREEMENT_METHOD}")
+    raise ValueError(f"Unsupported DISAGREEMENT_METHOD: {DISAGREEMENT_METHOD}")
 
 
 def apply_article_formula(df: pd.DataFrame, weights: WeightGroup | None = None) -> pd.DataFrame:
@@ -328,9 +328,9 @@ def attention_by_sector(
 
     if switched_sectors:
         print(
-            "Attention 已切换自身历史 ECDF + 增长率路径："
-            + "、".join(switched_sectors)
-            + f"（历史至少 {ATTENTION_MIN_HISTORY_DAYS} 天）。"
+            "Attention switched to its own historical ECDF + growth-rate path: "
+            + ", ".join(switched_sectors)
+            + f" (at least {ATTENTION_MIN_HISTORY_DAYS} days of history)."
         )
     return scores
 

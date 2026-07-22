@@ -46,32 +46,32 @@ def coverage_summary(df: pd.DataFrame) -> dict[str, int]:
     """最小覆盖统计；正式评估接口将在后续阶段扩展。"""
     if df.empty:
         return {
-            "新闻数量": 0,
-            "来源数量": 0,
-            "板块覆盖数量": 0,
-            "Unmapped 新闻数量": 0,
-            "重复新闻数量": 0,
-            "时间解析错误数量": 0,
-            "处理错误数量": 0,
+            "article_count": 0,
+            "source_count": 0,
+            "sector_coverage_count": 0,
+            "unmapped_article_count": 0,
+            "duplicate_article_count": 0,
+            "time_parse_error_count": 0,
+            "processing_error_count": 0,
         }
 
     return {
-        "新闻数量": int(len(df)),
-        "来源数量": distinct_value_count(
+        "article_count": int(len(df)),
+        "source_count": distinct_value_count(
             df["publisher"] if "publisher" in df else df.get("source", []),
             df.get("source", []),
         ),
-        "板块覆盖数量": int(df["sector"].nunique()) if "sector" in df else 0,
-        "Unmapped 新闻数量": int((df["sector"].astype(str) == "Unmapped").sum()) if "sector" in df else 0,
-        "重复新闻数量": int(df["is_duplicate"].sum()) if "is_duplicate" in df else 0,
-        "时间解析错误数量": int(df["time_parse_error"].fillna("").astype(str).str.len().gt(0).sum()) if "time_parse_error" in df else 0,
-        "处理错误数量": int(df["processing_error"].fillna("").astype(str).str.len().gt(0).sum()) if "processing_error" in df else 0,
+        "sector_coverage_count": int(df["sector"].nunique()) if "sector" in df else 0,
+        "unmapped_article_count": int((df["sector"].astype(str) == "Unmapped").sum()) if "sector" in df else 0,
+        "duplicate_article_count": int(df["is_duplicate"].sum()) if "is_duplicate" in df else 0,
+        "time_parse_error_count": int(df["time_parse_error"].fillna("").astype(str).str.len().gt(0).sum()) if "time_parse_error" in df else 0,
+        "processing_error_count": int(df["processing_error"].fillna("").astype(str).str.len().gt(0).sum()) if "processing_error" in df else 0,
     }
 
 
 def coverage_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(
-        [{"指标": key, "值": value} for key, value in coverage_summary(df).items()]
+        [{"Metric": key, "Value": value} for key, value in coverage_summary(df).items()]
     )
 
 
@@ -96,18 +96,18 @@ def output_distribution(df: pd.DataFrame) -> pd.DataFrame:
             continue
         values = pd.to_numeric(df[column], errors="coerce").dropna()
         if values.empty:
-            rows.append({"字段": column, "数量": 0})
+            rows.append({"field": column, "count": 0})
             continue
         rows.append(
             {
-                "字段": column,
-                "数量": int(values.count()),
-                "最小值": float(values.min()),
+                "field": column,
+                "count": int(values.count()),
+                "min": float(values.min()),
                 "P10": float(values.quantile(0.1)),
-                "中位数": float(values.median()),
-                "均值": float(values.mean()),
+                "median": float(values.median()),
+                "mean": float(values.mean()),
                 "P90": float(values.quantile(0.9)),
-                "最大值": float(values.max()),
+                "max": float(values.max()),
             }
         )
     return pd.DataFrame(rows)
@@ -150,28 +150,28 @@ def accuracy_row(
     label_column: str,
 ) -> dict[str, float | str | int]:
     if not label_column or prediction_column not in merged:
-        return {"任务": task_name, "标注数量": 0, "命中数量": 0, "准确率": 0.0}
+        return {"task": task_name, "labelled_count": 0, "correct_count": 0, "accuracy": 0.0}
 
     labels = merged[label_column].fillna("").astype(str).str.strip().str.lower()
     predictions = merged[prediction_column].fillna("").astype(str).str.strip().str.lower()
     valid_mask = labels.ne("")
     total = int(valid_mask.sum())
     if total == 0:
-        return {"任务": task_name, "标注数量": 0, "命中数量": 0, "准确率": 0.0}
+        return {"task": task_name, "labelled_count": 0, "correct_count": 0, "accuracy": 0.0}
 
     correct = int((labels[valid_mask] == predictions[valid_mask]).sum())
     return {
-        "任务": task_name,
-        "标注数量": total,
-        "命中数量": correct,
-        "准确率": round(correct / total, 4),
+        "task": task_name,
+        "labelled_count": total,
+        "correct_count": correct,
+        "accuracy": round(correct / total, 4),
     }
 
 
 def evaluate_annotations(predictions: pd.DataFrame, annotations: pd.DataFrame) -> pd.DataFrame:
     """基于人工标注 CSV 计算最小准确率指标。"""
     if predictions.empty or annotations.empty or "article_id" not in annotations.columns:
-        return pd.DataFrame(columns=["任务", "标注数量", "命中数量", "准确率"])
+        return pd.DataFrame(columns=["task", "labelled_count", "correct_count", "accuracy"])
 
     prepared_predictions = predictions.copy()
     sentiment_scores = pd.to_numeric(prepared_predictions["sentiment_score"], errors="coerce").fillna(0)
@@ -222,13 +222,13 @@ def formula_metric_comparison(
                 continue
             rows.append(
                 {
-                    "指标": METRIC_LABELS[metric],
-                    "公式版本": version,
-                    "均值": float(values.mean()),
-                    "标准差": float(values.std(ddof=0)),
-                    "最小值": float(values.min()),
-                    "最大值": float(values.max()),
-                    "范围": float(values.max() - values.min()),
+                    "metric": METRIC_LABELS[metric],
+                    "formula_version": version,
+                    "mean": float(values.mean()),
+                    "std": float(values.std(ddof=0)),
+                    "min": float(values.min()),
+                    "max": float(values.max()),
+                    "range": float(values.max() - values.min()),
                 }
             )
     return pd.DataFrame(rows)
@@ -264,31 +264,31 @@ def _rank_change_reason(
         bull = values.get("b_bull", 0.0)
         growth = values.get("g_growth", 0.0)
         if bull == 0 and growth == 0:
-            return "成长与多头立场词未命中；变化来自 FinBERT 概率权重由 1.0 调整为 0.7"
-        leading = "多头立场" if 0.2 * bull >= 0.1 * growth else "成长主题"
-        return f"主要增强项：{leading}（B_bull={bull:.2f}, G_growth={growth:.2f}）"
+            return "No growth or bullish-stance terms matched; the change comes from the FinBERT probability weight moving from 1.0 to 0.7"
+        leading = "bullish stance" if 0.2 * bull >= 0.1 * growth else "growth theme"
+        return f"Main driver: {leading} (B_bull={bull:.2f}, G_growth={growth:.2f})"
     if metric == "fear":
         bear = values.get("b_bear", 0.0)
         shock = values.get("s_shock", 0.0)
         if bear == 0 and shock == 0:
-            return "冲击与空头立场词未命中；变化来自 FinBERT 概率权重由 1.0 调整为 0.7"
-        leading = "空头立场" if 0.2 * bear >= 0.1 * shock else "恐慌冲击"
-        return f"主要增强项：{leading}（B_bear={bear:.2f}, S_shock={shock:.2f}）"
+            return "No shock or bearish-stance terms matched; the change comes from the FinBERT probability weight moving from 1.0 to 0.7"
+        leading = "bearish stance" if 0.2 * bear >= 0.1 * shock else "panic shock"
+        return f"Main driver: {leading} (B_bear={bear:.2f}, S_shock={shock:.2f})"
     if metric == "uncertainty":
         uncertainty = values.get("k_unc", 0.0)
         return (
-            f"LM 不确定性词组件 K_unc={uncertainty:.2f}，并重配 neutral/entropy 权重"
+            f"LM uncertainty-term component K_unc={uncertainty:.2f}, plus reweighted neutral/entropy"
             if uncertainty
-            else "未命中 LM 不确定性词；变化来自 neutral/entropy 权重重配"
+            else "No LM uncertainty terms matched; the change comes from the neutral/entropy reweighting"
         )
     if metric == "attention":
         days = history_days.get(sector, 0)
         if days < ATTENTION_MIN_HISTORY_DAYS:
-            return f"历史 {days} 天，未达 {ATTENTION_MIN_HISTORY_DAYS} 天；两组均使用冷启动排名"
-        return f"历史 {days} 天；Enhanced 在自身历史 ECDF 中加入 30% 新闻量增长率"
+            return f"{days} days of history, short of {ATTENTION_MIN_HISTORY_DAYS}; both versions use cold-start ranking"
+        return f"{days} days of history; Enhanced adds a 30% article-volume growth rate within its own historical ECDF"
     if metric == "disagreement":
-        return "默认使用无阈值的加权成对情绪距离；旧式 PolarityMix 仅保留作消融开关"
-    return "Risk Intensity 本批两组权重相同，公式与排名不变"
+        return "Uses threshold-free weighted pairwise sentiment distance by default; the legacy PolarityMix is kept only as an ablation switch"
+    return "Risk Intensity uses identical weights in both versions for this batch, so the formula and ranking are unchanged"
 
 
 def formula_rank_changes(
@@ -325,14 +325,14 @@ def formula_rank_changes(
             sector = str(row["sector"])
             rows.append(
                 {
-                    "指标": METRIC_LABELS[metric],
-                    "板块": sector,
-                    "Baseline 排名": float(row["baseline_rank"]),
-                    "Enhanced 排名": float(row["enhanced_rank"]),
-                    "排名变化（正数=上升）": float(row["rank_change"]),
-                    "Baseline 分数": float(row[f"{metric}_baseline"]),
-                    "Enhanced 分数": float(row[f"{metric}_enhanced"]),
-                    "主要原因": _rank_change_reason(
+                    "metric": METRIC_LABELS[metric],
+                    "sector": sector,
+                    "baseline_rank": float(row["baseline_rank"]),
+                    "enhanced_rank": float(row["enhanced_rank"]),
+                    "rank_change (positive = moved up)": float(row["rank_change"]),
+                    "baseline_score": float(row[f"{metric}_baseline"]),
+                    "enhanced_score": float(row[f"{metric}_enhanced"]),
+                    "main_reason": _rank_change_reason(
                         metric, sector, component_means, history_days
                     ),
                 }
@@ -398,11 +398,11 @@ def formula_article_examples(df: pd.DataFrame, limit: int = 3) -> pd.DataFrame:
     candidates = candidates.loc[selected_indexes[:limit]]
 
     labels = {
-        "b_bull": "多头立场",
-        "b_bear": "空头立场",
-        "g_growth": "成长",
-        "s_shock": "冲击",
-        "k_unc": "不确定性",
+        "b_bull": "bullish stance",
+        "b_bear": "bearish stance",
+        "g_growth": "growth",
+        "s_shock": "shock",
+        "k_unc": "uncertainty",
     }
     rows: list[dict[str, float | str]] = []
     for record in candidates.to_dict("records"):
@@ -416,18 +416,18 @@ def formula_article_examples(df: pd.DataFrame, limit: int = 3) -> pd.DataFrame:
         ]
         rows.append(
             {
-                "新闻": str(record.get("title", "")),
-                "板块": str(record.get("sector", "")),
-                "命中增强词": "；".join(term_parts) or "无",
-                "Baseline 乐观度": baseline_values["optimism"],
-                "Enhanced 乐观度": enhanced_values["optimism"],
-                "乐观度变化": enhanced_values["optimism"] - baseline_values["optimism"],
-                "Baseline 恐惧度": baseline_values["fear"],
-                "Enhanced 恐惧度": enhanced_values["fear"],
-                "恐惧度变化": enhanced_values["fear"] - baseline_values["fear"],
-                "Baseline 不确定性": baseline_values["uncertainty"],
-                "Enhanced 不确定性": enhanced_values["uncertainty"],
-                "不确定性变化": enhanced_values["uncertainty"] - baseline_values["uncertainty"],
+                "article": str(record.get("title", "")),
+                "sector": str(record.get("sector", "")),
+                "matched_enhanced_terms": "; ".join(term_parts) or "none",
+                "baseline_optimism": baseline_values["optimism"],
+                "enhanced_optimism": enhanced_values["optimism"],
+                "optimism_change": enhanced_values["optimism"] - baseline_values["optimism"],
+                "baseline_fear": baseline_values["fear"],
+                "enhanced_fear": enhanced_values["fear"],
+                "fear_change": enhanced_values["fear"] - baseline_values["fear"],
+                "baseline_uncertainty": baseline_values["uncertainty"],
+                "enhanced_uncertainty": enhanced_values["uncertainty"],
+                "uncertainty_change": enhanced_values["uncertainty"] - baseline_values["uncertainty"],
             }
         )
     return pd.DataFrame(rows)
@@ -591,25 +591,25 @@ def align_annotation_key(
     missing_annotation = sorted(required_annotation - set(annotations.columns))
     missing_key = sorted(required_key - set(annotation_key.columns))
     if missing_annotation:
-        raise ValueError(f"标注 CSV 缺少字段：{missing_annotation}")
+        raise ValueError(f"Annotation CSV is missing fields: {missing_annotation}")
     if missing_key:
-        raise ValueError(f"annotation_key 缺少字段：{missing_key}")
+        raise ValueError(f"annotation_key is missing fields: {missing_key}")
 
     prepared_annotations = annotations.copy()
     prepared_key = annotation_key.copy()
     prepared_annotations["article_id"] = prepared_annotations["article_id"].fillna("").astype(str)
     prepared_key["article_id"] = prepared_key["article_id"].fillna("").astype(str)
     if prepared_annotations["article_id"].eq("").any():
-        raise ValueError("标注 CSV 存在空 article_id。")
+        raise ValueError("Annotation CSV has a blank article_id.")
     if prepared_annotations["article_id"].duplicated().any():
-        raise ValueError("标注 CSV 存在重复 article_id。")
+        raise ValueError("Annotation CSV has a duplicate article_id.")
     if prepared_key["article_id"].duplicated().any():
-        raise ValueError("annotation_key 存在重复 article_id。")
+        raise ValueError("annotation_key has a duplicate article_id.")
     unmatched = sorted(
         set(prepared_annotations["article_id"]) - set(prepared_key["article_id"])
     )
     if unmatched:
-        raise ValueError(f"有 {len(unmatched)} 个 article_id 无法在 annotation_key 对账。")
+        raise ValueError(f"{len(unmatched)} article_id(s) could not be reconciled against annotation_key.")
 
     merged = prepared_annotations.merge(
         prepared_key,
@@ -618,7 +618,7 @@ def align_annotation_key(
         validate="one_to_one",
     )
     if merged.empty:
-        raise ValueError("标注 CSV 与 annotation_key 没有可对齐的 article_id。")
+        raise ValueError("No matching article_id between the annotation CSV and annotation_key.")
     return merged
 
 
@@ -634,7 +634,7 @@ def risk_multilabel_report(merged: pd.DataFrame) -> dict[str, Any]:
     predicted_sets = labelled["predicted_risk_categories"].apply(parse_risk_labels)
     unknown = sorted(set().union(*true_sets.tolist()) - set(canonical_labels))
     if unknown:
-        raise ValueError(f"label_risk_categories 含未知类别：{unknown}")
+        raise ValueError(f"label_risk_categories contains unknown categories: {unknown}")
 
     rows: list[dict[str, float | int | str]] = []
     for label in canonical_labels:
@@ -667,7 +667,7 @@ def binary_quality_summary(merged: pd.DataFrame, column: str) -> dict[str, float
     nonempty = merged[column].fillna("").astype(str).str.strip().ne("")
     invalid = merged.loc[nonempty & labels.isna(), column].astype(str).unique().tolist()
     if invalid:
-        raise ValueError(f"{column} 含无效值：{sorted(invalid)}")
+        raise ValueError(f"{column} contains invalid values: {sorted(invalid)}")
     valid = labels.notna()
     values = labels[valid].astype(bool)
     return {
@@ -796,9 +796,9 @@ def evaluate_model_annotations(
         "label_sentiment",
     ].astype(str).unique().tolist()
     if invalid_sentiment:
-        raise ValueError(f"label_sentiment 含无效值：{sorted(invalid_sentiment)}")
+        raise ValueError(f"label_sentiment contains invalid values: {sorted(invalid_sentiment)}")
     if merged["normalized_finbert_prediction"].eq("").any():
-        raise ValueError("annotation_key 含无效 FinBERT 情绪预测。")
+        raise ValueError("annotation_key contains an invalid FinBERT sentiment prediction.")
     sentiment_frame = merged[
         merged["normalized_true_sentiment"].isin(SENTIMENT_LABELS)
         & merged["normalized_finbert_prediction"].isin(SENTIMENT_LABELS)
@@ -811,8 +811,8 @@ def evaluate_model_annotations(
     if not sentiment_frame.empty:
         true_labels = sentiment_frame["normalized_true_sentiment"].tolist()
         predictions = {
-            "全中性基线": ["neutral"] * len(sentiment_frame),
-            "词典引擎": lexicon_sentiment_predictions(sentiment_frame),
+            "All-neutral baseline": ["neutral"] * len(sentiment_frame),
+            "Lexicon engine": lexicon_sentiment_predictions(sentiment_frame),
             "FinBERT": sentiment_frame["normalized_finbert_prediction"].tolist(),
         }
         reports = {

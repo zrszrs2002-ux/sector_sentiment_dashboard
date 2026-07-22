@@ -13,8 +13,8 @@ from src.config import (
 )
 
 
-REAL_DATA_LABEL = "真实新闻"
-DEMO_DATA_LABEL = "Demo 数据"
+REAL_DATA_LABEL = "Real news"
+DEMO_DATA_LABEL = "Demo data"
 
 
 def empty_articles_df() -> pd.DataFrame:

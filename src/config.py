@@ -61,7 +61,11 @@ ANNOTATION_SAMPLE_SEED = 5720
 ANNOTATION_RANDOM_SEED = ANNOTATION_SAMPLE_SEED
 CALIBRATION_BIN_COUNT = 10
 
-DISCLAIMER = "本系统基于公开财经新闻自动分析市场舆情，结果仅供研究参考，不构成投资建议。投资有风险，决策需独立判断。"
+DISCLAIMER = (
+    "This system automatically analyzes market sentiment based on public financial news. "
+    "Results are for research reference only and do not constitute investment advice. "
+    "Investing involves risk; please make independent decisions."
+)
 
 RSS_USER_AGENT = (
     "SectorSentimentDashboard/0.2 "
@@ -105,12 +109,12 @@ METRIC_COLUMNS = [
 ]
 
 METRIC_LABELS = {
-    "optimism": "乐观度",
-    "fear": "恐惧度",
-    "uncertainty": "不确定性",
-    "attention": "关注度",
-    "disagreement": "分歧度",
-    "risk_intensity": "风险强度",
+    "optimism": "Optimism",
+    "fear": "Fear",
+    "uncertainty": "Uncertainty",
+    "attention": "Attention",
+    "disagreement": "Disagreement",
+    "risk_intensity": "Risk Intensity",
 }
 
 FORMULA_VERSION_BASELINE = "baseline"
