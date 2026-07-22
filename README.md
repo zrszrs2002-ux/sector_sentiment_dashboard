@@ -1,100 +1,100 @@
 # AI-powered Sector Sentiment Intelligence Dashboard
 
-中文名：自动化板块级金融舆情雷达系统
+An automated sector-level financial news sentiment radar.
 
-## 1. 项目简介
+## 1. Project Overview
 
-本项目是一个面向日常跟踪的公开财经新闻舆情监测工具。系统从 RSS 财经新闻中提取标题、摘要、URL、发布时间、feed 来源与真实出版方，并只为高价值文章选择性提取正文用于模型分析；经过公司/ticker/板块映射、主题与风险标签、可选 FinBERT/词典情绪模型、事件级聚类和六维指标聚合后，在 Streamlit dashboard 中展示市场级和板块级舆情状态。
+This project is a public financial-news sentiment monitoring tool designed for daily tracking. It extracts titles, summaries, URLs, publication timestamps, feed sources, and actual publishers from financial RSS feeds. Full text is selectively retrieved only for high-value articles and is used solely for model analysis. After company, ticker, and sector mapping; topic and risk tagging; optional FinBERT or lexicon-based sentiment analysis; event-level clustering; and six-dimensional metric aggregation, the results are presented in a Streamlit dashboard at both market and sector levels.
 
-免责声明：本系统基于公开财经新闻自动分析市场舆情，结果仅供研究参考，不构成投资建议。投资有风险，决策需独立判断。
+Disclaimer: This system automatically analyzes market sentiment from public financial news. Its output is for research purposes only and does not constitute investment advice. Investing involves risk, and all decisions should be made independently.
 
-真实新闻是主要数据源；Demo 数据只作为离线兜底、测试脚手架和页面演示样本。当前版本提供 FinBERT 可选 wrapper；依赖或模型不可用时会回退到离线词典情绪 fallback，并在侧边栏/命令行给出中文提示。
+Real news is the primary data source. Demo data is retained only as an offline fallback, testing scaffold, and UI demonstration sample. The current version includes an optional FinBERT wrapper. If its dependencies or model are unavailable, the system falls back to the offline lexicon sentiment engine and displays an explanatory message in the sidebar or command line.
 
-## 2. 功能
+## 2. Features
 
-- 市场总览：展示市场级六维指标、板块热力图、每日简报和按事件折叠的 Top Market Drivers；每个事件可展开查看全部报道。Unmapped 宏观新闻进入 Market Brief 和 Top Drivers，但不摊入板块聚合。
-- 板块比较：比较 11 个 GICS 风格板块的 Optimism、Fear、Uncertainty、Attention、Disagreement、Risk Intensity。
-- 板块详情：查看单板块雷达图、趋势框架、重点公司、主题、证据句和高风险新闻。
-- 文章浏览器：查看处理后的新闻列表，支持发布时间、来源、板块、风险类别筛选及按 `event_id` 分组，URL 可点击跳转。
-- 评估：提供 300 条分层盲标、全中性/词典/FinBERT 三方分类对比、混淆矩阵、风险与证据句指标、FinBERT 校准和错误样本分析；六维公式描述性对照保留为独立区块。
-- RSS 抓取：20 个有效源由 `data/rss_sources.json` 外置管理，包括 Yahoo ticker 模板、CNBC 分类、MarketWatch 分类、Google News、Nasdaq、Benzinga、Motley Fool、Investing.com、Fortune、Business Insider 和 NYT Business；不使用已停止服务的 Reuters RSS。
+- Market Overview: displays market-level six-dimensional metrics, a sector heatmap, the daily brief, and event-collapsed Top Market Drivers. Each event can be expanded to show all related coverage. Unmapped macro news is included in the Market Brief and Top Drivers but is not allocated to sector aggregates.
+- Sector Comparison: compares Optimism, Fear, Uncertainty, Attention, Disagreement, and Risk Intensity across 11 GICS-style sectors.
+- Sector Detail: shows a sector radar chart, trend framework, key companies, topics, evidence sentences, and high-risk news.
+- Article Explorer: displays processed articles with filters for publication time, publisher, sector, and risk category, plus optional grouping by `event_id`. URLs are clickable.
+- Evaluation: provides a 300-item stratified blind-labeling workflow, an all-neutral/lexicon/FinBERT three-way classification comparison, confusion matrices, risk and evidence metrics, FinBERT calibration, and error analysis. Descriptive comparisons of the six-dimensional formulas remain in a separate section.
+- RSS collection: 20 active source definitions are managed externally in `data/rss_sources.json`, including Yahoo ticker templates, CNBC categories, MarketWatch categories, Google News, Nasdaq, Benzinga, The Motley Fool, Investing.com, Fortune, Business Insider, and NYT Business. The discontinued Reuters RSS service is not used.
 
-市场总览与板块比较的热力图按模式使用连续色阶：相对模式为乐观度 `Greens`、关注度 `Blues`，其余警惕型指标使用高值趋红的 `RdYlGn_r`。绝对模式保持乐观度 `Greens` 与关注度 `Blues`，恐惧度改用 `Reds` 形成绿/红对照，不确定性、分歧度和风险强度继续使用 `RdYlGn_r`。
+Heatmaps on Market Overview and Sector Comparison use continuous color scales by mode. In relative mode, Optimism uses `Greens`, Attention uses `Blues`, and the remaining caution-oriented metrics use `RdYlGn_r`, where higher values trend red. In absolute mode, Optimism remains `Greens`, Attention remains `Blues`, Fear uses `Reds` for a clear green/red contrast, and Uncertainty, Disagreement, and Risk Intensity continue to use `RdYlGn_r`.
 
-## 3. 数据来源与存储
+## 3. Data Sources and Storage
 
-RSS 层只读取标题、摘要、URL、发布时间、feed 名和 entry 的 `source/publisher`。`publisher` 缺失时回退 feed 名。`content` 始终保留 RSS 摘要；系统只对当日高价值文章选择性抓取正文并写入 `body_text`，正文仅供模型分析，任何页面都不展示全文。MarketWatch、Google News、Fortune、Business Insider、NYT 等付费墙或聚合跳转源在配置中禁止正文请求，只收 headline feed。
+The RSS layer reads only the title, summary, URL, publication timestamp, feed name, and the entry's `source/publisher`. If `publisher` is missing, the feed name is used as a fallback. `content` always retains the RSS summary. Full text is selectively retrieved for high-value articles from the current day and stored in `body_text`; it is used only for model analysis and is never displayed in the UI. Full-text requests are disabled in configuration for paywalled or aggregator redirect sources such as MarketWatch, Google News, Fortune, Business Insider, and NYT, which remain headline-feed sources only.
 
-当前 20 个启用源：Yahoo Finance ticker template；CNBC Top News、Markets、Technology、Economy、Earnings、Business；MarketWatch Top Stories、Real-time Headlines、Market Pulse；Google News Business、Markets；Nasdaq Markets、Earnings；Benzinga Markets；Motley Fool；Investing.com Stock Market News；Fortune；Business Insider；NYT Business。
+The 20 currently enabled sources are: Yahoo Finance ticker template; CNBC Top News, Markets, Technology, Economy, Earnings, and Business; MarketWatch Top Stories, Real-time Headlines, and Market Pulse; Google News Business and Markets; Nasdaq Markets and Earnings; Benzinga Markets; The Motley Fool; Investing.com Stock Market News; Fortune; Business Insider; and NYT Business.
 
-主要数据文件：
+Primary data files:
 
-- `data/raw_articles.csv`：RSS 抓取后的真实新闻原始累积数据。多次抓取会累积保存，重复 URL+标题会合并 ticker/company/source 语境。
-- `data/rss_sources.json`：RSS 源、类型、启用状态、每源抓取上限、来源质量权重和正文许可策略。
-- `data/real_processed_articles.csv`：真实新闻经过预处理、去重、映射、标签、情绪和评分后的结果。
-- `data/fulltext_cache.json`：正文请求的永久缓存。成功正文与失败尝试都会留档；相同 article_id、URL 或规范化标题不再重复请求。
-- `data/demo_articles.csv`：本地生成的 Demo 原始样本。
-- `data/processed_articles.csv`：Demo 样本处理后的结果。
-- `data/error_records.csv`：单条新闻处理失败时的降级记录，避免一条坏数据中断整批流水线。
-- `data/sector_daily_scores.csv`：板块级每日快照；同日分别保存 `baseline` 和 `enhanced` 两个 `formula_version`，并用 `pipeline_revision` 标记语义修订；r4 起新增事件数与出版方数原料列。
-- `data/market_daily_scores.csv`：市场级每日快照；与板块快照同步双写两套公式结果和管线修订号。
-- `data/backups/`：CSV 写入前的自动备份目录。系统采用临时文件写入、备份旧文件、原子替换，降低数据被覆盖或写坏的风险；每个源文件默认保留最近 10 份备份。
+- `data/raw_articles.csv`: cumulative raw real-news data collected from RSS. Repeated runs append data, while duplicate URL/title pairs merge ticker, company, publisher, and source context.
+- `data/rss_sources.json`: RSS source definitions, source types, enabled state, per-source limits, source-quality weights, and full-text permission policies.
+- `data/real_processed_articles.csv`: real news after preprocessing, deduplication, mapping, tagging, sentiment analysis, and scoring.
+- `data/fulltext_cache.json`: permanent cache of full-text requests. Both successful retrievals and failed attempts are recorded. The same article ID, URL, or normalized title is not requested again.
+- `data/demo_articles.csv`: locally generated raw demo samples.
+- `data/processed_articles.csv`: processed demo samples.
+- `data/error_records.csv`: degraded records for individual article-processing failures, preventing a single bad item from stopping the batch pipeline.
+- `data/sector_daily_scores.csv`: daily sector snapshots. `baseline` and `enhanced` formula versions are stored separately for each day, with `pipeline_revision` recording semantic revisions. Revision r4 adds raw event-count and publisher-count fields.
+- `data/market_daily_scores.csv`: daily market snapshots, with the same dual formula-version writes and pipeline revision as sector snapshots.
+- `data/backups/`: automatic backups created before CSV writes. The system writes to a temporary file, backs up the previous file, and performs an atomic replacement to reduce overwrite and corruption risk. By default, the 10 most recent backups are retained for each source file.
 
-RSS 通常只覆盖最近几天的新闻。30 天趋势需要连续多日运行抓取来积累，短期内真实新闻模式下趋势图稀疏是预期行为。
+RSS feeds usually expose only the most recent few days. A 30-day trend requires the collector to run continuously over time, so sparse trend charts are expected shortly after real-news mode is first enabled.
 
-## 4. 数据字典补充
+## 4. Data Dictionary Additions
 
-- `agg_weight`：聚合权重，计算为 `time_weight * relevance_weight * dedup_factor * source_weight`，用于加权平均和加权标准差。
-- `source_weight`：来自 `rss_sources.json` 的来源质量先验。主流直接来源通常为 `1.0`，聚合器及较小来源为 `0.8-0.95`；重复新闻跨 feed 合并时取最大值。当前权重待人工标注后校准。
-- `publisher`：RSS entry 的真实出版方；缺失时回退 feed 名。Google News 等聚合源可因此保留原始媒体口径。
-- `event_id`：事件簇 ID，等于簇内 `agg_weight` 最高的代表文章 `article_id`；未与其他文章成簇时等于自身 `article_id`。
-- `source_count`：事件簇内不同 `publisher` 数；同一 `event_id` 的所有文章记录相同值。
-- `body_text`：Trafilatura 提取的正文，仅用于模型分析和离线评估，不在页面显示。
-- `content_level`：`summary` 或 `fulltext`，用于第二冲刺比较摘要版与正文版信号。
-- `rescored`：正文抓取后是否已重跑情绪、证据句、风险和主题管线。
-- `pipeline_revision`：每日快照的数据管线语义修订号。`r1` 为早期管线，`r2` 为风险公式/聚类护栏，`r3` 为多源、publisher 与来源权重结构，`r4` 为 Fear/Risk/Disagreement Tier-A 公式与快照计数扩列；同日不同 revision 以复合主键并存，趋势断点可据此审计。
-- `event_count` / `publisher_count`：板块每日快照的去重事件数与独立出版方数；r4 以前的历史行保留空值。从今日开始积累，供未来 Attention 三分量 ECDF 与相对自身历史分位展示使用。
-- `b_bull` / `b_bear`：文章句子命中多头/空头立场词的归一化分数。
-- `g_growth` / `s_shock`：文章句子命中成长主题/市场恐慌或避险反应词的归一化分数；`s_shock` 为兼容既有 CSV 的字段名，实际词源为 `panic_keywords.json`。
-- `k_unc`：文章句子命中扩充后不确定性词典的归一化分数。
-- `entropy_norm`：FinBERT 三分类概率熵除以 `log(3)` 后的 0-1 分数。
-- `attention_weight`：保留字段，恒为 0。关注度在板块层由新闻量计算，文章层无实际含义。
-- `disagreement_input`：`sentiment_score` 的逐行副本，作为板块分歧度输入留档；默认聚合直接用它计算加权成对绝对距离。
-- `time_parse_error`：发布时间或采集时间解析失败时记录 fallback 原因。
-- `processing_error`：单条新闻处理失败时记录异常摘要；该行会以低权重降级输出。
+- `agg_weight`: aggregation weight calculated as `time_weight * relevance_weight * dedup_factor * source_weight`, used for weighted means and weighted standard deviations.
+- `source_weight`: source-quality prior from `rss_sources.json`. Major direct sources usually use `1.0`, while aggregators and smaller sources use `0.8-0.95`. When duplicate articles are merged across feeds, the maximum value is retained. These weights remain subject to calibration against human annotations.
+- `publisher`: actual publisher from the RSS entry, falling back to the feed name when absent. This allows aggregator feeds such as Google News to preserve the original publisher where available.
+- `event_id`: event-cluster ID, equal to the `article_id` of the representative article with the highest `agg_weight`. An article that is not clustered with another article uses its own `article_id`.
+- `source_count`: number of distinct `publisher` values in an event cluster. All articles with the same `event_id` share the same value.
+- `body_text`: full text extracted by Trafilatura, used only for model analysis and offline evaluation and never displayed in the UI.
+- `content_level`: either `summary` or `fulltext`, used during the second sprint to compare summary-based and full-text signals.
+- `rescored`: whether sentiment, evidence sentence, risk, and topic processing has been rerun after full-text retrieval.
+- `pipeline_revision`: semantic revision of the daily snapshot pipeline. `r1` is the early pipeline, `r2` adds the risk-formula and clustering guards, `r3` adds multi-source publishers and source weights, and `r4` adds the Tier-A Fear/Risk/Disagreement formulas and snapshot-count columns. Multiple revisions for the same day coexist under a composite key so trend discontinuities remain auditable.
+- `event_count` / `publisher_count`: deduplicated event count and independent publisher count in a daily sector snapshot. Historical rows before r4 retain null values. These fields accumulate from r4 onward for a future three-component Attention ECDF and within-sector historical percentile display.
+- `b_bull` / `b_bear`: normalized sentence-level matches for bullish and bearish stance terms.
+- `g_growth` / `s_shock`: normalized sentence-level matches for growth themes and market panic or risk-off reactions. `s_shock` is retained for CSV compatibility, while its actual vocabulary now comes from `panic_keywords.json`.
+- `k_unc`: normalized sentence-level score from the expanded uncertainty dictionary.
+- `entropy_norm`: FinBERT three-class probability entropy divided by `log(3)`, producing a 0-1 score.
+- `attention_weight`: retained field fixed at 0. Attention is calculated at sector level from article volume and has no article-level meaning.
+- `disagreement_input`: row-level copy of `sentiment_score` retained as the input to sector disagreement. The default aggregation computes weighted pairwise absolute distance directly from it.
+- `time_parse_error`: fallback reason recorded when the publication or collection timestamp cannot be parsed.
+- `processing_error`: exception summary recorded when an article fails processing; the row is emitted in a low-weight degraded form.
 
-## 5. 六维指标
+## 5. Six-dimensional Metrics
 
-### 5.1 组件与词典
+### 5.1 Components and Dictionaries
 
-成长、恐慌、多空立场和不确定性组件共用句级匹配函数：`K = min(命中句子数 / 总句子数 * 3, 1)`。系数 `3` 由 `KEYWORD_SENTENCE_SCORE_MULTIPLIER` 配置。Fear 的 `S_shock` 改读 `panic_keywords.json`，只覆盖 panic selling、risk-off、flight to safety 等市场恐慌/避险反应；违约、调查、衰退等风险事件不再重复进入 Fear。`positive_direction_blockers.json` 会在同一句含 slows、misses、cut、weak、decline 等反向修饰词时阻断 growth/bullish 命中。`shock_keywords.json` 保留风险事件分组供词典审计，不再用于 Fear。
+Growth, panic, bullish/bearish stance, and uncertainty components share a sentence-level matching function: `K = min(matched sentence count / total sentence count * 3, 1)`. The coefficient `3` is configured through `KEYWORD_SENTENCE_SCORE_MULTIPLIER`. Fear's `S_shock` now reads from `panic_keywords.json` and covers only reactions such as panic selling, risk-off behavior, and flight to safety. Risk events such as defaults, investigations, and recessions no longer enter Fear a second time. `positive_direction_blockers.json` blocks growth or bullish matches when the same sentence contains opposing modifiers such as `slows`, `misses`, `cut`, `weak`, or `decline`. `shock_keywords.json` is retained as an audit grouping for risk events but is no longer used by Fear.
 
-不确定性词表在原有词表上合并了 University of Notre Dame 发布的 [Loughran-McDonald Master Dictionary](https://sraf.nd.edu/loughranmcdonald-master-dictionary/) 中当前有效的 Uncertainty 类词。引用：Loughran, T. and McDonald, B. (2011), [When Is a Liability Not a Liability? Textual Analysis, Dictionaries, and 10-Ks](https://ssrn.com/abstract=1331573), *Journal of Finance*, 66(1), 35-65。当前合并后 `k_unc` 使用 302 个去重词条。
+The uncertainty vocabulary merges the original list with currently active Uncertainty terms from the University of Notre Dame [Loughran-McDonald Master Dictionary](https://sraf.nd.edu/loughranmcdonald-master-dictionary/). Citation: Loughran, T. and McDonald, B. (2011), [When Is a Liability Not a Liability? Textual Analysis, Dictionaries, and 10-Ks](https://ssrn.com/abstract=1331573), *Journal of Finance*, 66(1), 35-65. The merged `k_unc` vocabulary contains 302 unique terms.
 
-### 5.2 文章级公式
+### 5.2 Article-level Formulas
 
-令 `p_pos/p_neu/p_neg` 为 FinBERT 概率，`H_norm = -sum(p * log(p)) / log(3)`。当前 `ACTIVE_WEIGHTS` 指向 Enhanced：
+Let `p_pos/p_neu/p_neg` be the FinBERT probabilities and `H_norm = -sum(p * log(p)) / log(3)`. `ACTIVE_WEIGHTS` currently points to Enhanced:
 
-- Optimism：`100 * clip(0.7*p_pos + 0.2*B_bull + 0.1*G_growth, 0, 1)`。
-- Fear：`100 * clip(0.7*p_neg + 0.2*B_bear + 0.1*S_panic, 0, 1)`；技术语义收窄为下行/避险压力，并与事件风险严重度解耦（persisted 字段名仍为 `s_shock`）。
-- Uncertainty：`100 * clip(0.4*p_neu + 0.3*H_norm + 0.3*K_unc, 0, 1)`。
+- Optimism: `100 * clip(0.7*p_pos + 0.2*B_bull + 0.1*G_growth, 0, 1)`.
+- Fear: `100 * clip(0.7*p_neg + 0.2*B_bear + 0.1*S_panic, 0, 1)`. Its technical meaning is narrowed to downside and risk-off pressure and is separated from event-risk severity. The persisted field name remains `s_shock`.
+- Uncertainty: `100 * clip(0.4*p_neu + 0.3*H_norm + 0.3*K_unc, 0, 1)`.
 
-Baseline 使用同一函数，只替换为 `1/0/0`、`1/0/0` 和 `0.6/0.4/0` 权重。`p_positive/p_neutral/p_negative` 与六个组件均持久化到 processed CSV，因此切换权重或做消融时只需纯算术重算，不需要再次运行 FinBERT 或词典匹配。`BASELINE_WEIGHTS`、`ENHANCED_WEIGHTS` 和 `ACTIVE_WEIGHTS` 均集中在 `src/config.py`；一键回退只需让 `ACTIVE_WEIGHTS` 指向 baseline 组。
+Baseline uses the same functions with weights `1/0/0`, `1/0/0`, and `0.6/0.4/0`. The three probabilities and all six components are persisted to the processed CSV, so weight changes and ablations require arithmetic recomputation only, without rerunning FinBERT or dictionary matching. `BASELINE_WEIGHTS`, `ENHANCED_WEIGHTS`, and `ACTIVE_WEIGHTS` are centralized in `src/config.py`; a one-step rollback only requires pointing `ACTIVE_WEIGHTS` to the baseline group.
 
-### 5.3 板块级公式
+### 5.3 Sector-level Formulas
 
-- Optimism / Fear / Uncertainty：使用文章 `agg_weight` 加权平均。
-- Attention 冷启动：近 7 天板块加权新闻量 `N = sum(agg_weight)` 的横截面排名分位，`100 * (rank - 0.5) / 11`，并列取平均排名。
-- Attention Enhanced：某板块累计至少 `ATTENTION_MIN_HISTORY_DAYS = 30` 天快照后，自动切换为 `100 * clip(0.7*ECDF_hist(N) + 0.3*ECDF_hist(Growth), 0, 1)`；`Growth` 相对最近 7 天平均加权新闻量计算。历史不足时继续走冷启动并在对比说明中标注。Baseline 历史路径为 `1.0*ECDF_hist(N) + 0.0*ECDF_hist(Growth)`。
-- Disagreement：默认去阈值，计算 `100 * Σ(i<j) w_i*w_j*|s_i-s_j| / (DISAGREEMENT_PAIRWISE_NORMALIZATION * Σ(i<j) w_i*w_j)`，当前归一化系数为 2.0；少于 2 条新闻时为 0。`DISAGREEMENT_METHOD="legacy_std_mix"` 可复原旧式加权标准差与 PolarityMix，供消融使用；归一化系数待人工标注校准。
-- Risk Intensity：未命中风险时为 0。每个命中类别先计算句级密度 `r_k = min(命中句子数 / 总句子数 * 3, 1)`，再令 `q_k=(v_k/5)*r_k`；默认文章级联合为 `100*(1-Π(1-q_k))`（`RISK_COMBINE="noisy_or"`），`sum` 保留为旧式消融。板块层先按 event_id 取最高 agg_weight 代表，防同事件多篇报道重复计入，再计算 `0.7 * 加权平均 + 0.3 * 加权 P90`；少于 3 个事件时以均值替代 P90。
-- Macro risk 词典把衰退、滞胀、硬着陆等作为强触发词；通胀、经济放缓、消费疲弱等弱信号需在同一文章命中至少 2 个不同词才触发。该门槛由词表级 `min_distinct_hits` 配置，避免 `market/economy/growth` 等泛化词造成大面积误报。
+- Optimism / Fear / Uncertainty: `agg_weight`-weighted article means.
+- Attention cold start: cross-sectional rank percentile of seven-day weighted sector article volume `N = sum(agg_weight)`, calculated as `100 * (rank - 0.5) / 11`, with average ranks for ties.
+- Attention Enhanced: after a sector accumulates at least `ATTENTION_MIN_HISTORY_DAYS = 30` snapshot days, it automatically switches to `100 * clip(0.7*ECDF_hist(N) + 0.3*ECDF_hist(Growth), 0, 1)`. `Growth` is measured relative to the recent seven-day average weighted article volume. Sectors with insufficient history remain on the cold-start path and are identified in comparison notes. The Baseline historical path uses `1.0*ECDF_hist(N) + 0.0*ECDF_hist(Growth)`.
+- Disagreement: the default threshold-free method calculates `100 * sum(i<j) w_i*w_j*|s_i-s_j| / (DISAGREEMENT_PAIRWISE_NORMALIZATION * sum(i<j) w_i*w_j)`, with a current normalization coefficient of 2.0. Fewer than two articles produce 0. `DISAGREEMENT_METHOD="legacy_std_mix"` restores the previous weighted-standard-deviation and PolarityMix method for ablation. The normalization coefficient remains subject to human-label calibration.
+- Risk Intensity: 0 when no risk is matched. Each matched category first receives sentence density `r_k = min(matched sentence count / total sentence count * 3, 1)`, then `q_k=(v_k/5)*r_k`. The default article-level combination is `100*(1-product(1-q_k))` with `RISK_COMBINE="noisy_or"`; `sum` is retained as the legacy ablation option. At sector level, the highest-`agg_weight` representative for each `event_id` is selected to prevent duplicate event coverage from being counted repeatedly. The aggregate is then `0.7 * weighted mean + 0.3 * weighted P90`; with fewer than three events, the mean replaces P90.
+- The macro-risk dictionary treats recession, stagflation, and hard landing as strong triggers. Weak signals such as inflation, economic slowdown, and consumer weakness require at least two distinct matches in the same article. This threshold is controlled by the dictionary-level `min_distinct_hits` setting and prevents broad terms such as `market`, `economy`, or `growth` from generating widespread false positives.
 
-以上 Enhanced 权重均为专家先验，`config.py` 已标注 TODO；第二冲刺将基于人工标注做正式消融和敏感性分析。每日板块/市场快照按 `formula_version` 双写 baseline 与 enhanced；趋势图和 LLM 简报只读取 `ACTIVE_FORMULA_VERSION`。
+All Enhanced weights above are expert priors and are marked with TODOs in `config.py`. Formal ablation and sensitivity analysis use the human-annotation workflow. Daily sector and market snapshots store Baseline and Enhanced results separately by `formula_version`; trend charts and LLM briefs read only `ACTIVE_FORMULA_VERSION`.
 
-市场级雷达当前采用 11 个板块等权平均，而不是新闻量加权，以避免真实新闻流量过度集中在少数高曝光板块时主导市场总览。
+The market radar currently averages the 11 sectors equally rather than weighting by article volume, preventing a few high-coverage sectors from dominating the market overview.
 
-## 6. 本地运行
+## 6. Local Setup
 
 ```bash
 cd sector_sentiment_dashboard
@@ -102,152 +102,154 @@ python setup_env.py
 streamlit run app.py
 ```
 
-`setup_env.py` 会自动探测 NVIDIA GPU：有 GPU 时安装 CUDA 版 torch，无 GPU 或探测失败时安装 CPU 版 torch；如果已检测到本地 GPU 版 torch，会跳过 torch 安装，避免覆盖。脚本会读取云端基础清单 `requirements.txt` 和本地完整功能附加清单 `requirements-full.txt`，主动排除其中的 CPU torch 和 transformers，再单独安装适合本地环境的版本。附加清单当前固定 `sentence-transformers==5.6.0`，用于事件 embedding 聚类。
+`setup_env.py` automatically detects an NVIDIA GPU. It installs the CUDA build of torch when a GPU is available and the CPU build otherwise. If an existing local GPU-enabled torch installation is detected, torch installation is skipped to avoid overwriting it. The script reads the cloud base list in `requirements.txt` and the local feature add-ons in `requirements-full.txt`, excludes the cloud CPU torch and transformers entries, and then installs versions suitable for the local environment. The add-on list currently pins `sentence-transformers==5.6.0` for event embedding clustering.
 
-本地环境禁止执行 `pip install -r requirements.txt`，因为该文件固定包含云端 CPU 版 torch，可能覆盖已经可用的本地 GPU 版本。
+Do not run `pip install -r requirements.txt` for local setup because that file pins the cloud CPU build of torch and may overwrite a working local GPU build.
 
-默认采用两段式加载：先以严格本地模式读取 `ProsusAI/finbert` 缓存，命中时直接启动；缓存未命中时才允许联网下载。下载或模型加载失败时自动回退词典模型。
+FinBERT uses two-stage loading by default: it first reads the `ProsusAI/finbert` cache in strict local mode and starts immediately on a cache hit. Only a cache miss permits an online download. Download or model-loading failures automatically fall back to the lexicon engine.
 
-FinBERT 相关配置集中在 `src/config.py`：
+FinBERT settings are centralized in `src/config.py`:
 
-- `SENTIMENT_DEVICE = "auto"`：可选 `auto/cuda/cpu`；`auto` 会在 `torch.cuda.is_available()` 为 True 时使用 CUDA。
-- `FINBERT_LOCAL_FILES_ONLY`：默认 `auto`，先读缓存、未命中再下载；仅在显式设为 `1` 时启用严格离线并跳过下载重试。
-- `FINBERT_BATCH_SIZE`：运行时从环境变量读取，默认 `32`；云端建议设为 `8` 以降低 CPU 内存峰值。
-- `HF_TOKEN`：可选 Hugging Face token，配置后会传给 tokenizer 和模型下载请求，用于降低共享出口 IP 遭遇限流的概率。
-- `FINBERT_REVISION`：固定为 `4556d13015211d73dccd3fdd39d39232506f3e43`，确保本地与云端使用一致权重，不跟随上游 `main` 静默变化。
-- 标签映射使用 `model.config.id2label` 动态解析，并在启动时做映射测试，避免把 `negative` 和 `neutral` 的概率静默互换。
+- `SENTIMENT_DEVICE = "auto"`: accepts `auto/cuda/cpu`; `auto` uses CUDA when `torch.cuda.is_available()` is true.
+- `FINBERT_LOCAL_FILES_ONLY`: defaults to `auto`, reading the cache first and downloading only after a miss. Set it explicitly to `1` for strict offline mode with no download retry.
+- `FINBERT_BATCH_SIZE`: read from the environment at runtime and defaults to `32`. A value of `8` is recommended in the cloud to reduce peak CPU memory.
+- `HF_TOKEN`: optional Hugging Face token passed to tokenizer and model download requests to reduce rate-limit risk on shared outbound IP addresses.
+- `FINBERT_REVISION`: pinned to `4556d13015211d73dccd3fdd39d39232506f3e43` so local and cloud environments use identical weights instead of silently following upstream `main`.
+- Label mapping is resolved dynamically from `model.config.id2label` and tested at startup to prevent silent swaps between `negative` and `neutral` probabilities.
 
-命令行抓取真实 RSS 新闻：
+Collect real RSS news from the command line:
 
 ```bash
 python -m src.news_collector
 ```
 
-也可以在 Streamlit 侧边栏点击“抓取最新新闻”。真实数据文件非空时，页面默认使用真实新闻；真实数据为空或不可读时，系统会提示并回落到 Demo 数据。
+You can also select **Fetch Latest News** in the Streamlit sidebar. Real news is used by default when the real-data file is non-empty. If the file is empty or unreadable, the system displays a warning and falls back to Demo data.
 
-## 7. 云端部署
+## 7. Cloud Deployment
 
-Streamlit Community Cloud 直接使用项目根目录的 `requirements.txt`。该文件保留 CPU FinBERT 所需依赖，但不安装 `sentence-transformers`；云端事件聚类会自动使用 lexical Jaccard 路径。`requirements-full.txt` 是本地 embedding 功能附加清单，本地安装仍一律使用 `python setup_env.py`，避免覆盖 GPU torch。
+Streamlit Community Cloud uses the project-root `requirements.txt`. It contains the CPU FinBERT dependencies but does not install `sentence-transformers`; cloud event clustering therefore uses the lexical Jaccard path automatically. `requirements-full.txt` contains the local embedding add-on, and local installation should always use `python setup_env.py` to protect a GPU-enabled torch installation.
 
-在 Streamlit Community Cloud 的 Secrets 中配置：
+Configure these values in Streamlit Community Cloud Secrets:
 
 ```toml
 OPENAI_API_KEY = "your_replacement_api_key"
 FINBERT_BATCH_SIZE = "8"
 DEMO_PIN = "your_private_demo_pin"
-# 可选；遇到 Hugging Face 共享出口限流时配置
+# Optional: configure this if the shared Hugging Face outbound IP is rate-limited.
 HF_TOKEN = "hf_your_optional_token"
 ```
 
-`DEMO_PIN` 用于保护侧边栏“立即重新生成简报”操作，避免公开演示页面被反复调用而产生 API 费用。不要将真实 key 或口令提交到仓库。
+`DEMO_PIN` protects the sidebar's **Regenerate Brief Now** operation from repeated use on a public demo, which could incur API costs. Never commit real keys or passwords to the repository.
 
-云端无需配置 `FINBERT_LOCAL_FILES_ONLY`：默认 `auto` 会先检查缓存，未命中时下载约 440MB 的 `ProsusAI/finbert` 模型并显示等待提示；下载时间受网络和实例性能影响，CPU 推理也会比本地 GPU 慢。模型下载或加载失败时系统会继续使用词典模型，不会中断页面。需要完全断网运行时才将该变量设为 `1`。
+`FINBERT_LOCAL_FILES_ONLY` does not need to be configured in the cloud. The default `auto` mode checks the cache first and, on a miss, downloads the approximately 440 MB `ProsusAI/finbert` model while displaying a waiting message. Download time depends on network and instance performance, and CPU inference is slower than a local GPU. If download or model loading fails, the system continues with the lexicon engine. Set the variable to `1` only for fully offline operation.
 
-Community Cloud 容器文件系统具有易失性：运行期间抓取的新 RSS、快照、历史简报和模型缓存可能在休眠、重启或重新部署后消失。公开演示的基准数据以仓库中已提交的 `data/` 文件为准；需要永久积累真实新闻时，应另接持久化存储。
+The Community Cloud container filesystem is ephemeral. RSS data, snapshots, historical briefs, and model caches created at runtime may disappear after sleep, restart, or redeployment. The public demo baseline is the committed content under `data/`. Use separate persistent storage if long-term real-news accumulation is required.
 
-## 8. 当前限制
+## 8. Current Limitations
 
-- FinBERT 是可选引擎；没有本地模型缓存或依赖时会回退词典模型。
-- 事件 embedding 阈值 `0.72` 是待校准先验值；同公司、同主题但不同事件的分析文章仍可能被误合并，第二冲刺需要用事件对标注数据评估。
-- RSS 摘要可能很短，证据句质量受来源摘要质量限制。
-- 历史 RSS entry 没有保存 publisher 时只能回退旧 feed 名；新抓取记录会优先使用 entry 中的真实出版方。
-- 正文抓取受站点 robots、页面结构和反爬策略影响；失败会静默降级为摘要并永久缓存失败状态，不自动重试。
-- 宏观/市场级 Unmapped 新闻当前主要进入文章浏览和市场驱动展示；不强行摊入 11 个板块聚合。
-- 评估模块已提供两套权重的描述统计、排名变化和新闻算例，但正式消融、显著性检验与敏感性分析仍留到第二冲刺。
-- 当前不提供投资建议，也不用于实时交易。
+- FinBERT is optional and falls back to the lexicon engine when its model cache or dependencies are unavailable.
+- The event embedding threshold of `0.72` is a prior that still requires calibration. Articles about the same company and topic but different events may be merged incorrectly; this should be evaluated against labeled article pairs.
+- RSS summaries may be short, so evidence quality depends on source-summary quality.
+- Historical RSS entries without a stored publisher can only fall back to the previous feed name. Newly collected records prefer the actual publisher in the entry.
+- Full-text retrieval depends on site robots rules, page structure, and anti-bot controls. Failures silently fall back to the summary and are cached permanently rather than retried automatically.
+- Unmapped macro and market news currently appears mainly in Article Explorer and market-driver displays and is not forced into the 11 sector aggregates.
+- The Evaluation module includes descriptive comparisons, annotation-based model evaluation, and weight sensitivity analysis. Additional ablation and significance testing remain future work.
+- The project does not provide investment advice and is not intended for real-time trading.
 
-## 9. 后续方向
+## 9. Future Work
 
-- 扩展 evaluation：消融、敏感性分析、更多标注字段。
-- 用事件对标注数据校准 embedding/lexical 阈值，并评估簇内新闻是否需要降权。
+- Extend evaluation with formal ablation, significance testing, and additional annotation fields.
+- Calibrate embedding and lexical thresholds against labeled event pairs and evaluate whether articles inside a cluster should be down-weighted.
 
-## 10. 每日市场简报与调度
+## 10. Daily Market Brief and Scheduling
 
-系统已加入“抓取多次/天、简报一次/天”的解耦机制：
+The system separates frequent collection from once-daily brief generation:
 
-- `python -m src.news_collector` 每次运行会从 `rss_sources.json` 读取源、累积写入 `data/raw_articles.csv`，并只对新增 `article_id` 运行映射、标签、情绪和评分管线；日志会输出“本次新增 N 条，复用 M 条”。
-- 摘要处理后，系统从 UTC 当日新闻中选择 Top Driver 候选、`|sentiment_score| >= 0.5`、`risk_intensity >= 60` 或多篇事件代表；每轮最多 30 篇，正文请求间隔至少 1 秒、超时 10 秒、失败不重试。成功文章批量重跑句级管线并再次覆盖当天快照，简报门闸最后执行。
-- 每次处理完成后会刷新 `data/sector_daily_scores.csv` 和 `data/market_daily_scores.csv`。同一 UTC 日期按 `formula_version` 分别 upsert baseline/enhanced 两行，历史日期不动；旧历史行自动补标 `baseline`。Sector Detail 的 7/30 天趋势和 LLM 简报只读取当前 ACTIVE 版本。
-- 简报门闸由 `BRIEF_GENERATION_HOUR_LOCAL` 控制。当前时间已过本地生成时刻且今天尚未生成过简报时，才会写入 `data/latest_brief.md`，并按日期归档到 `data/briefs/`。
-- LLM 简报使用 OpenAI 官方 Python SDK，API key 从环境变量 `OPENAI_API_KEY` 读取。运行时按 `gpt-5.6-terra → gpt-5.5` 顺序直接发起生成请求，`models.list()` 只提供日志参考，不再是可用性硬门槛。首选模型遇到 HTTP 429 会等待 5 秒重试一次；仍被限流，或遇到模型不存在、无权限、容量/服务暂不可用时，再切换到下一候选。候选均失败、没有 key、SDK 不可用或其他调用失败时会回退规则模板，管线不会崩溃。每次生成会把候选尝试、各次结果、最终模型及原因同时打印为中文日志，并写入最新简报和日期归档元数据。AI 简报按“核心观点—市场全景—板块与事件深读—风险与明日关注点—数据范围与免责声明”组织为 900-1200 字分析晨读，并在页面署名中显示实际模型；Streamlit 页面渲染路径只读取 `latest_brief.md`，不会自动调用 LLM API。
-- RSS 只覆盖最近几天的新闻，30 天趋势需要连续多日运行抓取来积累；短期内真实新闻模式下趋势图稀疏是预期行为。
+- Each `python -m src.news_collector` run reads source definitions from `rss_sources.json`, appends to `data/raw_articles.csv`, and runs mapping, tagging, sentiment, and scoring only for new `article_id` values. Logs report how many items were new and how many were reused.
+- After summary processing, the system selects full-text candidates from the current UTC day: Top Driver candidates, articles with `|sentiment_score| >= 0.5`, articles with `risk_intensity >= 60`, or representatives of multi-article events. Each run handles at most 30 articles, waits at least one second between requests, uses a 10-second timeout, and does not retry failures. Successfully retrieved articles are rescored in a batch, today's snapshots are rewritten, and the brief gate runs last.
+- Every completed processing run refreshes `data/sector_daily_scores.csv` and `data/market_daily_scores.csv`. Baseline and Enhanced rows are upserted separately by `formula_version` for the current UTC date; historical dates are left untouched, and legacy history is labeled `baseline`. Sector Detail trends and LLM briefs read only the active formula version.
+- The brief gate is controlled by `BRIEF_GENERATION_HOUR_LOCAL`. It writes `data/latest_brief.md` and a dated file under `data/briefs/` only when the local generation time has passed and today's brief has not already been generated.
+- The LLM brief uses the official OpenAI Python SDK and reads `OPENAI_API_KEY` from the environment. At runtime it attempts `gpt-5.6-terra` followed by `gpt-5.5`; `models.list()` is informational rather than a hard availability gate. A first HTTP 429 from the preferred model waits five seconds and retries once. If rate limiting persists, or the model is missing, unauthorized, at capacity, or temporarily unavailable, the next candidate is attempted. If every candidate fails, the key is absent, the SDK is unavailable, or another API error occurs, a rule-based template is used and the pipeline continues. Each generation logs candidate attempts, outcomes, the final model, and the reason, and writes that metadata into both the latest and dated brief. The AI brief is organized as Core View, Market Overview, Sector and Event Deep Dive, Risks and Tomorrow's Watch List, and Data Scope and Disclaimer, targeting 900-1,200 words. The page attribution displays the model that actually succeeded. Streamlit only reads `latest_brief.md` and never invokes the LLM API during page rendering.
+- RSS covers only the most recent few days. Thirty-day trends require continuous collection, so sparse real-news trend charts are expected during the initial accumulation period.
 
-本地启用 LLM 前可在 PowerShell 设置：
+Set the API key in PowerShell before enabling the LLM locally:
 
 ```powershell
 $env:OPENAI_API_KEY="your_api_key"
 ```
 
-注册 Windows 任务计划程序，每 4 小时抓取一次：
+Register a Windows Scheduled Task that collects every four hours:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/setup_schedule.ps1
 ```
 
-查看任务：
+Inspect the task:
 
 ```powershell
 Get-ScheduledTask -TaskName SectorSentimentRSSCollector
 ```
 
-删除任务：
+Remove the task:
 
 ```powershell
 Unregister-ScheduledTask -TaskName SectorSentimentRSSCollector -Confirm:$false
 ```
 
-## 11. 存储分层与工作集窗口
+## 11. Storage Tiers and Working-set Window
 
-- `data/raw_articles.csv` 永久保留，不做自动清理，方便第二阶段人工标注抽样。文件超过 50MB 时，系统会在日志中提示建议迁移 SQLite；当前版本暂不执行迁移。
-- 仪表盘默认只加载 `WORKING_SET_DAYS = 30` 天内的已处理新闻，降低页面计算成本；Article Explorer 提供“加载全部历史”选项。
-- 每日快照表不受工作集窗口影响，会永久累积。
+- `data/raw_articles.csv` is retained permanently for second-stage human-annotation sampling. When it exceeds 50 MB, the system logs a recommendation to migrate to SQLite; the current version does not perform that migration.
+- The dashboard loads only the most recent `WORKING_SET_DAYS = 30` days of processed news by default to reduce page-computation cost. Article Explorer provides a **Load Full History** option.
+- Daily snapshot tables are not constrained by the working-set window and accumulate permanently.
 
-## 12. 同事件折叠
+## 12. Event-level Collapsing
 
-- 默认 `EVENT_SIMILARITY_ENGINE = "embedding"`，使用 `sentence-transformers/all-MiniLM-L6-v2`。两篇文章需同时满足发布时间相差不超过 48 小时、ticker 有交集、标题+摘要余弦相似度不低于 `0.72` 才会合并。无 ticker 的 Unmapped 新闻使用更严格的 `0.82` 阈值。
-- embedding 依赖、模型或推理不可用时自动回退 lexical：内容词 Jaccard 阈值为 `0.40`，无 ticker Unmapped 阈值为 `0.55`。日志会输出请求引擎、实际引擎、设备与回退原因。
-- 聚类采用并查集，但任一事件簇总时间跨度不得超过 72 小时；两篇报道若一篇情绪分数高于 `+0.3`、另一篇低于 `-0.3`，则禁止连边。全量处理会重算所给历史；增量抓取只比较新增文章与其 48 小时时间邻域以及本批新增文章，不重算历史向量。向量只在内存中存在，不持久化。
-- Top Drivers 每个事件只展示最高 `agg_weight` 的代表文章，簇级 `driver_score` 取文章级最大值；`source_count >= 3` 时乘 `EVENT_COVERAGE_BOOST = 1.15`。该加成只用于展示排序。
-- 市场总览的 Top Market Drivers 提供“近 48 小时”（默认）和“近 30 天”切换。48 小时模式少于 `DRIVER_MIN_EVENTS = 5` 个事件时，依次扩至 72、168 小时，并在标题显示实际窗口；30 天模式与 `WORKING_SET_DAYS` 一致且不扩窗。每日市场简报继续只使用其既有的 24 小时数据包，因此两者窗口不同是预期设计。
-- 宏观/市场级 Unmapped 事件保证进入 Top Drivers，但最终仍按 `driver_score` 降序落位；仅因保障性入选的条目会标记“宏观保底”，不再固定置顶。
-- 事件折叠不会修改 `dedup_factor`、`agg_weight` 或六维聚合。多家独立报道仍各自贡献 Attention 和情绪；簇内降权是否合理留待第二冲刺用标注数据评估。
+- `EVENT_SIMILARITY_ENGINE = "embedding"` by default and uses `sentence-transformers/all-MiniLM-L6-v2`. Two articles are merged only when they are published within 48 hours, share at least one ticker, and have title-plus-summary cosine similarity of at least `0.72`. Unmapped articles without tickers use the stricter `0.82` threshold.
+- If the embedding dependency, model, or inference path is unavailable, the system falls back to lexical matching. Content-word Jaccard thresholds are `0.40` for ticker-linked articles and `0.55` for Unmapped articles without tickers. Logs report the requested engine, actual engine, device, and fallback reason.
+- Clustering uses union-find, but the total timespan of any event cluster cannot exceed 72 hours. An edge is also blocked if one article has sentiment above `+0.3` and the other below `-0.3`. Full processing recalculates the supplied history; incremental collection compares new articles only with their 48-hour neighborhood and other newly collected articles. Embeddings exist only in memory and are not persisted.
+- Top Drivers displays only the highest-`agg_weight` representative for each event, while cluster-level `driver_score` takes the maximum article-level value. A cluster with `source_count >= 3` receives `EVENT_COVERAGE_BOOST = 1.15` for display ranking only.
+- Market Overview supports **Last 48 Hours** (default) and **Last 30 Days**. If the 48-hour mode contains fewer than `DRIVER_MIN_EVENTS = 5` events, it expands to 72 and then 168 hours, and the heading shows the actual window. The 30-day mode matches `WORKING_SET_DAYS` and does not expand. The daily market brief continues to use its existing 24-hour payload, so the two windows intentionally differ.
+- Unmapped macro and market events are guaranteed inclusion in Top Drivers but retain descending `driver_score` order. Entries included only through this guarantee are marked as a macro fallback and are not pinned to the top.
+- Event collapsing does not modify `dedup_factor`, `agg_weight`, or six-dimensional aggregation. Independent reports still contribute separately to Attention and sentiment. Whether cluster members should be down-weighted remains an evaluation question.
 
-手动重算 processed CSV：
+Manually recalculate event IDs in a processed CSV:
 
 ```bash
 python -m src.event_clustering --input data/real_processed_articles.csv --engine embedding
 python -m src.event_clustering --input data/real_processed_articles.csv --engine lexical --dry-run
 ```
 
-## 13. 模型评估工具链
+## 13. Model Evaluation Toolchain
 
-从完整 raw 累积新闻生成 300 条盲标样本：
+Generate a 300-item blind-labeling sample from the complete accumulated raw-news set:
 
 ```bash
 python scripts/sample_for_annotation.py
 ```
 
-脚本与 Evaluation 页面的“步骤 1”均按预测板块 × FinBERT 三分类做确定性轮询均衡抽样。页面可配置抽样条数和随机种子，默认值分别为 `300` 与 `5720`；同一新闻池、条数和种子会精确复现同一批 article_id，变更种子会生成新批次。容量不足的小层取尽后，剩余名额分配给仍有候选的层。输出：
+The script and **Step 1** on the Evaluation page use deterministic round-robin balancing across predicted sector x FinBERT class. Sample size and random seed are configurable on the page and default to `300` and `5720`. The same article pool, size, and seed reproduce the exact same `article_id` set; changing the seed generates a new batch. Small strata are exhausted first, and remaining capacity is allocated across strata that still have candidates.
 
-- `data/annotation/annotation_blind.csv`：只含文章原文、URL、时间和空白人工标签，严禁包含预测字段。
-- `data/annotation/annotation_manual_raw.csv`：标注者原始填写的审计文件，保留归一化前的板块名与证据句原文。
-- `data/annotation/annotation_key.csv`：私有对账文件，保存 FinBERT 情绪概率、置信度、预测板块、风险类别和证据句，不提供给第一遍主标注者。
-- `data/annotation/annotation_meta.json`：当前盲标批次的实际条数、随机种子、生成时间与 article_id 指纹。评估报告必须引用该文件记录的最终批次种子，而非页面输入框的当前默认值。
-- `data/annotation/sentiment_errors.csv`：评估后导出的全部 FinBERT 情绪误判。
-- `docs/annotation_guide.md`：情绪边界、风险类别、证据句标准和两遍标注流程。
+Outputs:
 
-两遍流程用于同时满足盲标与 `sector_ok/evidence_ok`：主标注者先在看不到预测的情况下完成情绪和风险，并独立选取证据句；标签锁定后，评估负责人保管私有 key，只补充板块对账结果。`label_evidence_ok` 由标注者证据句与模型证据句自动匹配生成：文本规范化后互相包含，或相似度达到 `0.85`，即记为一致。
+- `data/annotation/annotation_blind.csv`: contains only source article text, URL, timestamp, and blank human-label fields. Prediction fields are strictly prohibited.
+- `data/annotation/annotation_manual_raw.csv`: audit copy of the annotator's original input, preserving pre-normalization sector names and evidence-sentence text.
+- `data/annotation/annotation_key.csv`: private reconciliation file containing FinBERT probabilities, confidence, predicted sector, risk categories, and evidence sentence. It must not be shown to the primary annotator during the first pass.
+- `data/annotation/annotation_meta.json`: final batch size, random seed, generation time, and article-ID fingerprint. Evaluation reports must cite the persisted final-batch seed rather than the page input's current default.
+- `data/annotation/sentiment_errors.csv`: all FinBERT sentiment errors exported after evaluation.
+- `docs/annotation_guide.md`: sentiment boundaries, risk categories, evidence-sentence rules, and the two-pass annotation process.
 
-Evaluation 页面在填写标签后计算：情绪 Accuracy、逐类 Precision/Recall/F1、Macro F1 和 3×3 混淆矩阵；同一标注集上的全中性基线、现有词典 fallback 与 FinBERT 三方对比；板块映射 Accuracy；风险多标签逐类 P/R/F1 与 Macro F1；证据句 Top-1 一致率；FinBERT 可靠性分桶和多分类 Brier score。证据句 Top-1 一致率衡量双方是否选中同一句，是比标注手册“可接受率”更严格的保守下界。风险 Macro F1 当前对配置中的 10 个规范风险类别等权计算，无支持类别按 0 计入，页面同时展示 support 便于解释；本批风险列空白按缺失处理而非 `none`，有效样本为 187 条。
+The two-pass process supports both blind labeling and `sector_ok/evidence_ok`. The primary annotator first labels sentiment and risk and independently selects an evidence sentence without seeing predictions. After those labels are locked, the evaluation owner uses the private key only to reconcile sector and evidence results. `label_evidence_ok` is generated by automatically comparing the annotator and model evidence sentences: a match is recorded when normalized text contains the other sentence or similarity reaches `0.85`.
 
-文章分类评估与六维权重敏感性分析相互独立；正式消融和显著性检验仍属于后续批次。
+After labels are completed, the Evaluation page calculates sentiment Accuracy, per-class Precision/Recall/F1, Macro F1, and a 3x3 confusion matrix; a three-way comparison among the all-neutral baseline, the existing lexicon fallback, and FinBERT on the same labels; sector-mapping Accuracy; per-class multi-label risk Precision/Recall/F1 and Macro F1; evidence Top-1 agreement; FinBERT reliability bins; and multiclass Brier score. Evidence Top-1 agreement measures whether both sides selected the same sentence and is a stricter conservative lower bound than the annotation guide's broader acceptability criterion. Risk Macro F1 equally weights the 10 configured canonical risk categories, assigning 0 to unsupported categories while displaying support for interpretation. Blank risk fields are treated as missing rather than `none`; the current batch contains 187 valid risk samples.
 
-### 13.1 权重敏感性分析
+Article-classification evaluation and six-dimensional weight sensitivity analysis are independent. Formal ablation and significance testing remain future work.
 
-`src/sensitivity_analysis.py` 仅从 `data/real_processed_articles.csv` 读取全部真实新闻，禁止使用或回退 `data/processed_articles.csv` 等 Demo 数据。模块复用已持久化的情绪概率、公式组件和现有 `sector_metrics(weights=...)` 聚合路径，按 `published_at` 的 UTC 日期全量回放 sector-day 六维分数，不重新运行 FinBERT。
+### 13.1 Weight Sensitivity Analysis
 
-分析以 `ENHANCED_WEIGHTS` 为默认值，对每个维度的每个分量分别乘以 `{0, 0.5, 0.8, 1.2, 1.5}`，随后只在该维度内按比例重归一化到权重和为 1。因子 `0` 表示单分量消融，其余因子覆盖权重降低 20%/50% 与提高 20%/50% 的局部扰动。
+`src/sensitivity_analysis.py` reads the full real-news history exclusively from `data/real_processed_articles.csv`. It rejects Demo sources such as `data/processed_articles.csv` and never falls back to them. The module reuses persisted sentiment probabilities, formula components, and the existing `sector_metrics(weights=...)` path to replay sector-day metrics by UTC publication date without rerunning FinBERT.
 
-每个扰动相对默认 Enhanced 结果报告三项稳定性指标：各日 11 个板块排名的 Spearman 相关取均值；全部 sector-day 分数在 0–100 尺度上的平均绝对变化；各日 Top-3 板块集合的 Jaccard 重合率取均值。默认 `pairwise_distance` 分歧度公式不消费保留给 `legacy_std_mix` 的旧分量权重，因此这些旧权重的扰动可能如实显示为零变化，不会为了美化结果改公式。
+Starting from `ENHANCED_WEIGHTS`, each component in each dimension is multiplied independently by `{0, 0.5, 0.8, 1.2, 1.5}` and then renormalized within that dimension so its weights sum to 1. Factor `0` is a single-component ablation; the other factors represent local reductions of 20%/50% and increases of 20%/50%.
 
-结果持久化到 `data/evaluation/sensitivity_analysis.csv`，包含生成时间、公式版本、固定真实数据源、目标维度/分量、扰动因子、默认与重归一化后权重及三项稳定性指标。Evaluation 页面的“运行权重敏感性分析”按钮才会触发重算；页面普通加载只展示已有结果、生成时间和每维度最敏感分量摘要。
+Each perturbation reports three stability metrics relative to the default Enhanced result: mean daily Spearman correlation across the 11 sector rankings; mean absolute score change across all sector-days on the 0-100 scale; and mean daily Jaccard overlap of the Top-3 sector sets. The default `pairwise_distance` Disagreement formula does not consume the legacy component weights retained for `legacy_std_mix`, so perturbing those legacy weights may correctly produce zero change rather than forcing an artificial result.
+
+Results are persisted to `data/evaluation/sensitivity_analysis.csv`, including generation time, formula version, fixed real-data source, target dimension and component, perturbation factor, default and renormalized weights, and all three stability metrics. Recalculation occurs only when **Run Weight Sensitivity Analysis** is selected on the Evaluation page. Normal page loads display existing results, generation time, and the most sensitive component in each dimension.
