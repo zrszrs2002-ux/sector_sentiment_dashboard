@@ -1,5 +1,6 @@
-# 本文件供 Streamlit Cloud 部署使用。
-# 本地环境一律运行 python setup_env.py；禁止本地执行 pip install -r requirements.txt，否则会用 CPU 版覆盖 GPU torch。
+# This file is used for Streamlit Cloud deployment.
+# For local environments, always run python setup_env.py. Do not run
+# pip install -r requirements.txt locally because it may replace a GPU build of torch with the CPU build.
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.12.1+cpu
 transformers==5.13.0

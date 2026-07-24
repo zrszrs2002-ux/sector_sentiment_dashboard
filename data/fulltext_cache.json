@@ -15,7 +15,7 @@
     "status": "failed",
     "attempted_at": "2026-07-11T11:41:06+00:00",
     "url": "https://finance.yahoo.com/m/082a233e-c56a-3b99-a968-08ce2bfc43f7/dow-jones-futures%3A-watch.html?.tsrc=rss",
-    "reason": "ValueError: 正文提取结果不足 200 字符"
+    "reason": "ValueError: Extracted article body is shorter than 200 characters"
   },
   "rss-6cff7971aab250e8": {
     "status": "failed",
@@ -753,7 +753,7 @@
     "attempted_at": "2026-07-12T20:19:58+00:00",
     "url": "https://finance.yahoo.com/m/4890ee8f-7be3-3f3f-a32e-d4b9d018d4ce/big-tech-is-pouring-billions.html?.tsrc=rss",
     "title": "Big Tech Is Pouring Billions Into AI, and the Stock Market Wants to See the Payoff—Now",
-    "reason": "ValueError: 正文提取结果不足 200 字符"
+    "reason": "ValueError: Extracted article body is shorter than 200 characters"
   },
   "rss-f96afe45de19e8fc": {
     "status": "failed",
@@ -781,7 +781,7 @@
     "attempted_at": "2026-07-12T20:20:07+00:00",
     "url": "https://finance.yahoo.com/m/e67e0e18-c4ca-3b86-be2c-94bccf78557f/this-data-center-ipo-is-the.html?.tsrc=rss",
     "title": "This Data Center IPO Is the Next Big Test for the AI Trade",
-    "reason": "ValueError: 正文提取结果不足 200 字符"
+    "reason": "ValueError: Extracted article body is shorter than 200 characters"
   },
   "rss-6a0040f810b4cb0e": {
     "status": "failed",
@@ -1076,7 +1076,7 @@
     "attempted_at": "2026-07-18T19:48:15+00:00",
     "url": "https://finance.yahoo.com/m/6c8dacfc-1037-32fc-a343-353600ff0076/dow-jones-futures%3A-google%2C.html?.tsrc=rss",
     "title": "Dow Jones Futures: Google, Tesla, AMD Loom After AI Stock Sell-Off",
-    "reason": "ValueError: 正文提取结果不足 200 字符"
+    "reason": "ValueError: Extracted article body is shorter than 200 characters"
   },
   "rss-25aacab386e6a889": {
     "status": "success",

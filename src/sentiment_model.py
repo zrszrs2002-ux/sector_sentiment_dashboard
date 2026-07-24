@@ -1,7 +1,9 @@
-"""可选 FinBERT 情绪模型与词典 fallback。
+"""Optional FinBERT sentiment model with lexicon fallback.
 
-FinBERT 作为主引擎时按句子批量推理；依赖、模型或设备不可用时平稳回退到
-本地词典模型。文章级聚合仍由本模块末尾的 `analyze_article_sentiment()` 完成。
+When FinBERT is the primary engine, inference is batched by sentence. If a
+dependency, model, or device is unavailable, processing falls back cleanly to
+the local lexicon model. `analyze_article_sentiment()` at the end of this
+module still performs article-level aggregation.
 """
 
 from __future__ import annotations
@@ -92,7 +94,7 @@ def normalize_finbert_label(label: str) -> str:
 
 
 def build_label_to_index(id2label: dict[Any, Any]) -> dict[str, int]:
-    """动态解析 FinBERT 标签顺序，避免把 negative/neutral 静默互换。"""
+    """Resolve FinBERT label order dynamically to prevent silent negative/neutral swaps."""
     label_to_index: dict[str, int] = {}
     for index, label in id2label.items():
         normalized_label = normalize_finbert_label(str(label))
@@ -108,7 +110,7 @@ def build_label_to_index(id2label: dict[Any, Any]) -> dict[str, int]:
 
 
 def validate_label_mapping(label_to_index: dict[str, int], id2label: dict[Any, Any]) -> None:
-    """启动时做一次映射测试；ProsusAI/finbert 常见顺序为 0 positive, 1 negative, 2 neutral。"""
+    """Test label mapping at startup; ProsusAI/finbert commonly uses 0 positive, 1 negative, 2 neutral."""
     test_probabilities = [0.0] * (max(label_to_index.values()) + 1)
     test_probabilities[label_to_index["positive"]] = 0.7
     test_probabilities[label_to_index["negative"]] = 0.2
@@ -217,7 +219,7 @@ def load_finbert_resources() -> FinbertResources:
         validate_label_mapping(label_to_index, model.config.id2label)
         model.to(torch.device(device))
         model.eval()
-    except Exception as exc:  # noqa: BLE001 - 模型不可用时必须平稳回退
+    except Exception as exc:  # noqa: BLE001 - model unavailability must fall back cleanly
         return FinbertResources(
             tokenizer=None,
             model=None,
@@ -312,7 +314,7 @@ def score_sentences_finbert(sentences: list[str]) -> list[SentenceSentiment] | N
                 sentence_sentiment_from_probabilities(sentence, probabilities, resources.label_to_index)
                 for sentence, probabilities in zip(batch_sentences, batch_probabilities, strict=True)
             )
-    except Exception as exc:  # noqa: BLE001 - 批量推理失败时整批回退词典模型
+    except Exception as exc:  # noqa: BLE001 - a batch inference failure falls back to the lexicon model
         notice_finbert_fallback_once(f"FinBERT inference failed ({exc}); fell back to the lexicon sentiment model.")
         return None
 
@@ -417,7 +419,7 @@ def aggregate_sentiment_groups(
 
 
 def analyze_articles_sentiment(articles: list[tuple[str, str, str]]) -> list[ArticleSentiment]:
-    """跨文章收集句子后按当前 FINBERT_BATCH_SIZE 环境配置批量推理。"""
+    """Collect sentences across articles and infer in batches using the current FINBERT_BATCH_SIZE setting."""
     sentence_groups = [
         article_sentences(title, summary, content)
         for title, summary, content in articles
@@ -443,5 +445,5 @@ def analyze_articles_sentiment_lexicon(
 
 
 def analyze_article_sentiment(title: str, summary: str, content: str) -> ArticleSentiment:
-    """单篇文章入口；保留兼容性，内部复用批量接口。"""
+    """Single-article compatibility entry point implemented through the batch interface."""
     return analyze_articles_sentiment([(title, summary, content)])[0]

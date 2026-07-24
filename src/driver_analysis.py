@@ -7,7 +7,7 @@ from src.event_clustering import split_sources
 
 
 def macro_articles(df: pd.DataFrame) -> pd.DataFrame:
-    """返回未映射到 11 个板块的宏观/市场级新闻。"""
+    """Return macro/market news not mapped to the 11 sectors."""
     if df.empty or "sector" not in df:
         return df.head(0).copy()
     return df[df["sector"].fillna("").astype(str).eq("Unmapped")].copy()
@@ -37,7 +37,7 @@ def coverage_reason(source_count: int) -> str:
 
 
 def add_driver_scores(df: pd.DataFrame) -> pd.DataFrame:
-    """为新闻添加 Top Drivers 展示层分数，不改变六维聚合。"""
+    """Add a Top Drivers display score without changing six-dimensional aggregation."""
     if df.empty:
         return df.copy()
 
@@ -165,7 +165,7 @@ def recent_event_driver_rows(
     min_events: int = DRIVER_MIN_EVENTS,
     reference_time: object | None = None,
 ) -> tuple[pd.DataFrame, int]:
-    """事件折叠前先按发布时间筛选，并在新闻荒时逐级扩窗。"""
+    """Filter by publication time before event collapsing, expanding the window when news is sparse."""
     windows = _driver_window_options(window_hours)
     used_window = windows[-1]
     if df.empty or "published_at" not in df:
@@ -194,7 +194,7 @@ def top_driver_articles(
     min_events: int = DRIVER_MIN_EVENTS,
     reference_time: object | None = None,
 ) -> pd.DataFrame:
-    """返回重点驱动事件；传入窗口时仅折叠和排序窗口内新闻。"""
+    """Return key driver events; when a window is supplied, collapse and rank only news inside it."""
     used_window: int | None = None
     if window_hours is None:
         events = event_driver_rows(df)

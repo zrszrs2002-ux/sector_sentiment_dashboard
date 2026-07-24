@@ -1,7 +1,8 @@
-"""主题与风险标签识别。
+"""Topic and risk label detection.
 
-第一版使用独立 JSON 关键词词典。识别结果会给出命中的主题、风险类别、
-风险证据句和可选板块提示。
+The first version uses separate JSON keyword dictionaries. Results include
+matched topics, risk categories, risk evidence sentences, and an optional
+sector hint.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ def load_risk_rules() -> list[dict]:
 
 
 def split_sentences(text: str) -> list[str]:
-    """轻量分句，避免为本地运行引入 nltk 依赖。"""
+    """Split sentences lightly without adding an nltk dependency for local runs."""
     compact = re.sub(r"\s+", " ", str(text or "")).strip()
     if not compact:
         return []

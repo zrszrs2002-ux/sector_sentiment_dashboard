@@ -44,7 +44,7 @@ def signal_terms() -> dict[str, list[str]]:
         "b_bull": stance.get("bullish", []),
         "b_bear": stance.get("bearish", []),
         "g_growth": growth.get("growth", []),
-        # 保留 schema 字段名 s_shock；实际只使用市场恐慌/避险反应词。
+        # Retain the schema field name s_shock; only market panic/risk-off reaction terms are used.
         "s_shock": panic.get("panic", []),
         "k_unc": [str(term).strip().lower() for term in uncertainty if str(term).strip()],
         "positive_blockers": blockers.get("blockers", []),

@@ -1,7 +1,8 @@
-"""文章处理流水线。
+"""Article-processing pipeline.
 
-把原始新闻 CSV 转换为结构化新闻输出：公司/ticker/板块映射、主题标签、
-风险标签、词典情绪 fallback 和文章级基础分数。
+Convert raw-news CSV files into structured output with company, ticker, and
+sector mapping; topic and risk labels; lexicon sentiment fallback; and
+article-level base scores.
 """
 
 from __future__ import annotations
@@ -502,7 +503,7 @@ def enrich_records_batch(records: list[dict[str, str]]) -> tuple[list[dict[str, 
             enriched_records.append(
                 enrich_record(record, sentiment, fulltext_by_position.get(index))
             )
-        except Exception as exc:  # noqa: BLE001 - 单条失败不应中断整批处理
+        except Exception as exc:  # noqa: BLE001 - one failed row must not stop the batch
             fallback = error_record(record, exc)
             enriched_records.append(fallback)
             error_records.append(fallback)

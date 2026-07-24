@@ -22,7 +22,7 @@ def empty_articles_df() -> pd.DataFrame:
 
 
 def _read_articles(data_path: Path) -> pd.DataFrame:
-    """读取文章数据，并统一处理时间、数值和布尔字段。"""
+    """Load article data and normalize timestamp, numeric, and Boolean fields."""
     try:
         df = pd.read_csv(data_path)
     except (FileNotFoundError, OSError, EmptyDataError, ParserError, UnicodeDecodeError):
@@ -75,17 +75,17 @@ def filter_working_set(df: pd.DataFrame, load_all_history: bool = False) -> pd.D
 
 
 def load_demo_articles(load_all_history: bool = False) -> pd.DataFrame:
-    """读取原始 demo 新闻数据。"""
+    """Load raw demo-news data."""
     return filter_working_set(_read_articles(DATA_DIR / "demo_articles.csv"), load_all_history)
 
 
 def load_processed_articles(load_all_history: bool = False) -> pd.DataFrame:
-    """读取经过 UTC 标准化和去重标记后的新闻数据。"""
+    """Load news data after UTC normalization and duplicate marking."""
     return filter_working_set(_read_articles(DEMO_PROCESSED_ARTICLES_PATH), load_all_history)
 
 
 def load_real_articles(load_all_history: bool = False) -> pd.DataFrame:
-    """读取 RSS 抓取并处理后的真实新闻数据。"""
+    """Load real-news data collected and processed from RSS."""
     if not REAL_PROCESSED_ARTICLES_PATH.exists() or REAL_PROCESSED_ARTICLES_PATH.stat().st_size == 0:
         return empty_articles_df()
     real_df = _read_articles(REAL_PROCESSED_ARTICLES_PATH)
@@ -93,7 +93,7 @@ def load_real_articles(load_all_history: bool = False) -> pd.DataFrame:
 
 
 def has_real_articles() -> bool:
-    """判断真实新闻处理结果是否存在且至少包含一条数据。"""
+    """Return whether processed real-news output exists and contains at least one row."""
     if not REAL_PROCESSED_ARTICLES_PATH.exists() or REAL_PROCESSED_ARTICLES_PATH.stat().st_size == 0:
         return False
     try:
@@ -108,7 +108,7 @@ def load_articles(
     prefer_processed: bool = True,
     load_all_history: bool = False,
 ) -> pd.DataFrame:
-    """页面统一读取入口：根据侧边栏选择加载 demo 或真实新闻。"""
+    """Shared page loader: select demo or real-news data from the sidebar mode."""
     if source_mode == REAL_DATA_LABEL:
         return load_real_articles(load_all_history=load_all_history)
 

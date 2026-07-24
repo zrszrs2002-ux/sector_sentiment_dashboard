@@ -1,6 +1,7 @@
-"""数据预处理工具。
+"""Data-preprocessing utilities.
 
-负责 UTC 时间标准化、解析错误留档、基础去重和安全 CSV 写入。
+Handle UTC timestamp normalization, parse-error retention, basic deduplication,
+and safe CSV writes.
 """
 
 from __future__ import annotations
@@ -21,24 +22,24 @@ from src.config import (
     SIMILAR_TITLE_THRESHOLD,
 )
 
-# UTF-8 文本被错误按 cp1252 解码后的常见伪码序列 → 正确字符。
-# 2026-07-12 核查结论：当前存量数据不含任何伪码（此前审计看到的"It??s"是
-# GBK 控制台渲染 U+2019 弯引号的显示假象，数据本身是正规 Unicode），
-# 因此不做存量迁移；此表仅作为对未来编码异常 RSS 源的采集端防御。
+# Common mojibake sequences created when UTF-8 text is incorrectly decoded as cp1252, mapped to correct characters.
+# Audit conclusion on 2026-07-12: current stored data contains no mojibake. The previously observed "It??s"
+# was a GBK-console display artifact for the U+2019 curly apostrophe; the data itself is valid Unicode.
+# No stored-data migration is needed. This table only protects future collection from malformed RSS encodings.
 _MOJIBAKE_REPLACEMENTS = {
-    "â€™": "'",    # â€™ → 右单引号
-    "â€˜": "'",    # â€˜ → 左单引号
-    "â€œ": '"',    # â€œ → 左双引号
-    "â€": '"',    # â€? → 右双引号
+    "â€™": "'",    # Right single quotation mark
+    "â€˜": "'",    # Left single quotation mark
+    "â€œ": '"',    # Left double quotation mark
+    "â€": '"',    # Right double quotation mark
     "â€“": "-",    # â€“ → en dash
     "â€”": "-",    # â€” → em dash
-    "â€¦": "...",  # â€¦ → 省略号
-    "Â ": " ",          # Â+不间断空格 → 普通空格
+    "â€¦": "...",  # Ellipsis
+    "Â ": " ",     # Non-breaking space
 }
 
 
 def repair_mojibake(text: str) -> str:
-    """修复常见 cp1252 误解码伪码并移除 U+FFFD 替换符；正常文本原样返回。"""
+    """Repair common cp1252 mojibake and remove U+FFFD replacement characters; preserve valid text."""
     value = str(text or "")
     for broken, fixed in _MOJIBAKE_REPLACEMENTS.items():
         if broken in value:
@@ -47,7 +48,7 @@ def repair_mojibake(text: str) -> str:
 
 
 def parse_utc_datetime(value: object) -> datetime:
-    """把输入时间解析为 UTC datetime；解析失败时显式抛错，避免污染时间权重。"""
+    """Parse input as a UTC datetime; raise explicitly on failure to avoid corrupting time weights."""
     if not value:
         raise ValueError("empty datetime")
 
@@ -63,12 +64,12 @@ def parse_utc_datetime(value: object) -> datetime:
 
 
 def format_utc_datetime(value: object) -> str:
-    """统一输出 ISO 8601 UTC 时间字符串。"""
+    """Return a normalized ISO 8601 UTC timestamp string."""
     return parse_utc_datetime(value).isoformat(timespec="seconds")
 
 
 def format_utc_datetime_or_fallback(value: object, fallback: datetime) -> tuple[str, str]:
-    """返回标准化 UTC 时间和解析错误；fallback 会被记录，不再静默伪装成原始时间。"""
+    """Return normalized UTC time and a parse error; record fallbacks instead of silently preserving invalid input."""
     try:
         return format_utc_datetime(value), ""
     except (TypeError, ValueError) as exc:
@@ -97,7 +98,7 @@ def normalize_record_times(record: dict[str, str]) -> None:
 
 
 def normalize_title(title: str) -> str:
-    """把标题规范化后用于精确与相似去重。"""
+    """Normalize a title for exact and similarity-based deduplication."""
     lowered = str(title or "").lower()
     lowered = re.sub(r"https?://\S+", "", lowered)
     lowered = re.sub(r"[^a-z0-9\s]", " ", lowered)
@@ -106,14 +107,14 @@ def normalize_title(title: str) -> str:
 
 
 def title_similarity(left: str, right: str) -> float:
-    """计算两个规范化标题的相似度。"""
+    """Calculate similarity between two normalized titles."""
     if not left or not right:
         return 0.0
     return SequenceMatcher(None, left, right).ratio()
 
 
 def is_similar_reprint(candidate_title: str, previous_title: str) -> bool:
-    """判断是否是近似同题转载，避免把模板结构相似的不同新闻误判为重复。"""
+    """Detect near-duplicate coverage while avoiding false matches between structurally similar template articles."""
     candidate_tokens = candidate_title.split()
     previous_tokens = previous_title.split()
     if len(candidate_tokens) < SIMILAR_PREFIX_TOKEN_COUNT:
@@ -126,12 +127,12 @@ def is_similar_reprint(candidate_title: str, previous_title: str) -> bool:
 
 
 def ensure_article_columns(record: dict[str, str]) -> dict[str, str]:
-    """确保每条记录都包含约定字段，避免页面读取时报缺列。"""
+    """Ensure every record contains the expected fields so pages do not fail on missing columns."""
     return {column: record.get(column, "") for column in EXPECTED_ARTICLE_COLUMNS}
 
 
 def preprocess_records(records: list[dict[str, str]]) -> list[dict[str, str]]:
-    """标准化时间并标记 URL、标题和高相似标题重复。"""
+    """Normalize timestamps and mark duplicate URLs, exact titles, and highly similar titles."""
     processed: list[dict[str, str]] = []
     seen_urls: set[str] = set()
     seen_titles: dict[str, str] = {}
@@ -169,7 +170,7 @@ def preprocess_records(records: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def read_article_csv(path: Path) -> list[dict[str, str]]:
-    """读取文章 CSV。"""
+    """Read an article CSV file."""
     if not path.exists() or path.stat().st_size == 0:
         return []
     try:
@@ -209,7 +210,7 @@ def write_csv_atomic(path: Path, fieldnames: list[str], records: list[dict[str, 
 
 
 def write_article_csv(path: Path, records: list[dict[str, str]]) -> None:
-    """按固定字段顺序原子写出 CSV；替换前保留备份，降低历史数据丢失风险。"""
+    """Atomically write CSV columns in a fixed order, backing up the prior file before replacement."""
     path.parent.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     temp_path = path.with_name(f".{path.name}.{timestamp}.tmp")
@@ -234,7 +235,7 @@ def write_article_csv(path: Path, records: list[dict[str, str]]) -> None:
 
 
 def prune_backups(source_path: Path, backup_dir: Path) -> None:
-    """每个源文件只保留最近 N 份备份。"""
+    """Retain only the latest N backups for each source file."""
     if BACKUP_RETENTION_COUNT <= 0:
         return
     pattern = f"{source_path.stem}.*.bak{source_path.suffix}"
@@ -251,7 +252,7 @@ def prune_backups(source_path: Path, backup_dir: Path) -> None:
 
 
 def preprocess_csv(input_path: Path, output_path: Path) -> list[dict[str, str]]:
-    """从原始 demo CSV 生成处理后的文章 CSV。"""
+    """Generate a processed article CSV from a raw demo CSV."""
     records = read_article_csv(input_path)
     processed = preprocess_records(records)
     write_article_csv(output_path, processed)

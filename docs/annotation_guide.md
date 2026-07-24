@@ -1,54 +1,54 @@
-# 新闻分类盲标手册
+# Blind News-Classification Annotation Guide
 
-本任务评估模型的文章级分类，不评估投资价值。第一遍由主标注者只打开 `annotation_blind.csv`，不要查看 `annotation_key.csv`；先完成情绪和风险标签并锁定结果。第二遍由评估负责人保管私有 key，仅对账板块和证据句，不修改第一遍标签。每条新闻先通读标题、摘要和 content；三者重复时按一份文本理解。
+This task evaluates article-level model classifications, not investment merit. In the first pass, the primary annotator must open only `annotation_blind.csv` and must not inspect `annotation_key.csv`. Complete and lock the sentiment and risk labels first. In the second pass, the evaluation lead keeps the private key and reconciles only sector assignment and evidence sentences without changing first-pass labels. Read each article's title, summary, and content before labeling; when all three repeat the same text, treat them as one passage.
 
-盲标样本从 Evaluation 页面的“步骤 1”生成。抽样条数和随机种子可在页面修改；同一新闻池、条数和种子会精确复现同一批 article_id。生成后，`data/annotation/annotation_meta.json` 会记录当前批次实际条数、种子和生成时间；报告或复现实验应引用该文件中的最终批次种子，不要以页面输入框的默认值代替。
+Generate the blind-labeling sample from **Step 1** on the Evaluation page. The sample size and random seed can be changed on the page. Using the same news pool, sample size, and seed reproduces the exact same set of `article_id` values. After generation, `data/annotation/annotation_meta.json` records the actual row count, seed, and generation time for the current batch. Reports and reproducibility runs must cite the final batch seed from that file, not the page input's default value.
 
-## 1. 字段填写
+## 1. Fields
 
-- `url`：只读。在 Excel 中显示为“打开原文”链接，点击即可在浏览器打开对应新闻。
-- `label_sentiment`：只填 `positive`、`neutral`、`negative`。
-- `label_sector_ok`：第二遍对账字段。模型板块归属正确填 `1`，错误填 `0`；无法判断留空并在 `notes` 说明。
-- `label_risk_categories`：可多选，使用下表英文标签，以半角分号 `;` 分隔；没有明确风险填 `none`。
-- `label_evidence_ok`：第二遍对账字段。模型证据句能独立支持主要情绪或风险判断填 `1`，否则填 `0`；无法判断留空。
-- `notes`：记录边界案例、板块修正建议或误判原因，不要写模型预测。
+- `url`: Read-only. In Excel it appears as an **Open Article** link that opens the corresponding news article in a browser.
+- `label_sentiment`: Enter only `positive`, `neutral`, or `negative`.
+- `label_sector_ok`: Second-pass reconciliation field. Enter `1` when the model's sector assignment is correct and `0` when it is incorrect. Leave it blank when uncertain and explain the uncertainty in `notes`.
+- `label_risk_categories`: Multiple selections are allowed. Use the English labels in the table below, separated by ASCII semicolons (`;`). Enter `none` when the text contains no explicit risk.
+- `label_evidence_ok`: Second-pass reconciliation field. Enter `1` when the model's evidence sentence independently supports the main sentiment or risk judgment; otherwise enter `0`. Leave it blank when uncertain.
+- `notes`: Record borderline cases, suggested sector corrections, or reasons for misclassification. Do not record model predictions.
 
-## 2. 情绪三分类
+## 2. Three-Way Sentiment Labels
 
-- `positive`：文章主叙事明确指向经营改善、需求增长、业绩超预期、评级上调、风险缓解或其他有利结果。
-- `negative`：主叙事明确指向经营恶化、需求下滑、业绩不及预期、评级下调、诉讼/监管压力、危机或其他不利结果。
-- `neutral`：纯事实播报、信息不足、没有清晰方向，或正负信息基本抵消。
+- `positive`: The article's main narrative clearly indicates improving operations, growing demand, results above expectations, an upgrade, risk relief, or another favorable outcome.
+- `negative`: The main narrative clearly indicates worsening operations, falling demand, results below expectations, a downgrade, litigation or regulatory pressure, a crisis, or another unfavorable outcome.
+- `neutral`: The article is purely factual, lacks enough information or a clear direction, or contains roughly balanced positive and negative evidence.
 
-边界规则：
+Boundary rules:
 
-1. 正负混合时判断“文章最想传达的主结论”，不要机械数词。若利好与利空同等重要且无明显结论，标 `neutral`。
-2. 财报数字、交易完成、人事变动、会议安排等纯事实播报默认 `neutral`；只有文本明确说明其有利或不利含义时才改为正/负面。
-3. 以股价走势为报道主体时，明确上涨标 `positive`，明确下跌标 `negative`；只说波动加大、盘中反复或同时列举涨跌个股而无主方向，标 `neutral`。
-4. 分析师“买入/上调目标价”通常为 `positive`，“卖出/下调目标价”通常为 `negative`。标题中的转折以最终结论为准。
-5. 不根据标注者掌握的外部事实补充推断，只依据当前行文本。
+1. When positive and negative evidence are mixed, determine the main conclusion the article is trying to convey; do not count keywords mechanically. If favorable and unfavorable information are equally important and there is no clear conclusion, label it `neutral`.
+2. Purely factual reports of earnings figures, completed transactions, personnel changes, meeting schedules, and similar events default to `neutral`. Use a positive or negative label only when the text explicitly explains a favorable or unfavorable implication.
+3. When share-price movement is the article's main subject, a clear increase is `positive` and a clear decrease is `negative`. If the text only describes greater volatility, repeated intraday reversals, or a mixture of gainers and losers without a dominant direction, label it `neutral`.
+4. Analyst buy recommendations or target-price increases are usually `positive`; sell recommendations or target-price cuts are usually `negative`. When a headline contains a contrast, follow its final conclusion.
+5. Do not add inferences from outside knowledge. Judge only the text in the current row.
 
-## 3. 风险类别
+## 3. Risk Categories
 
-| 标签 | 定义与典型情形 |
+| Label | Definition and typical cases |
 |---|---|
-| `macro risk` | 经济衰退、通胀、增长放缓或系统性宏观冲击 |
-| `interest rate risk` | 利率、收益率、融资成本或货币政策变化 |
-| `regulatory risk` | 监管审查、政策限制、定价规则或合规变化 |
-| `earnings risk` | 盈利、收入、利润率、指引或执行不及预期 |
-| `valuation risk` | 估值过高、倍数压缩、资产价格或回调压力 |
-| `liquidity risk` | 融资、再融资、资金获取或流动性不足 |
-| `credit risk` | 违约、信贷质量、贷款损失或准备金压力 |
-| `geopolitical risk` | 制裁、贸易限制、战争或跨境供应冲击 |
-| `commodity risk` | 原油、金属等商品价格及投入成本波动 |
-| `demand risk` | 客户需求、订单、客流或销量疲弱及可见度下降 |
-| `none` | 文本没有明确风险，仅为一般信息或正面事件 |
+| `macro risk` | Recession, inflation, slowing growth, or systemic macroeconomic shocks |
+| `interest rate risk` | Changes in interest rates, yields, financing costs, or monetary policy |
+| `regulatory risk` | Regulatory review, policy restrictions, pricing rules, or compliance changes |
+| `earnings risk` | Earnings, revenue, margins, guidance, or execution falling below expectations |
+| `valuation risk` | Excessive valuation, multiple compression, asset-price pressure, or pullback risk |
+| `liquidity risk` | Financing, refinancing, access to funding, or insufficient liquidity |
+| `credit risk` | Default, credit quality, loan losses, or reserve pressure |
+| `geopolitical risk` | Sanctions, trade restrictions, war, or cross-border supply shocks |
+| `commodity risk` | Volatility in oil, metals, other commodity prices, or input costs |
+| `demand risk` | Weak customer demand, orders, traffic, or sales, or declining visibility |
+| `none` | The text contains no explicit risk and is only general information or a positive event |
 
-同一新闻可以有多个明确风险，例如油价冲击同时影响通胀时可填 `commodity risk;macro risk`。不要因为某风险“可能存在”就补标；文本需有直接依据。
+One article may contain multiple explicit risks. For example, an oil-price shock that also affects inflation may be labeled `commodity risk;macro risk`. Do not add a risk merely because it could exist; the text must provide direct evidence.
 
-## 4. 证据句标准
+## 4. Evidence-Sentence Standard
 
-合格证据句应同时满足：来自当前新闻；语义完整；无需依赖外部背景即可理解；直接支持主要情绪、风险或事件判断。只有公司名、残缺短语、RSS 截断片段、与主要结论无关的数字，或需要跨句猜测才能成立的内容均判为不合格。标题可以作为证据，但必须本身是完整且足以支持判断的陈述。
+A valid evidence sentence must meet all of these conditions: it comes from the current article; it is semantically complete; it is understandable without outside context; and it directly supports the main sentiment, risk, or event judgment. A company name alone, an incomplete phrase, a truncated RSS fragment, a number unrelated to the main conclusion, or text that requires cross-sentence guessing is invalid. A headline may serve as evidence only when it is itself a complete statement that sufficiently supports the judgment.
 
-## 5. 质控
+## 5. Quality Control
 
-第一遍独立标注不得查看对账 key。遇到不确定项可留空并写 notes，不要强行猜测。第一遍锁定后再由评估负责人完成第二遍对账；完成后检查所有非空标签是否严格使用本手册规定的英文值和分隔符。
+The independent first-pass annotator must not inspect the reconciliation key. When uncertain, leave a field blank and explain the issue in `notes` rather than guessing. After first-pass labels are locked, the evaluation lead completes second-pass reconciliation. Finally, verify that every non-empty label uses exactly the English values and delimiters defined in this guide.

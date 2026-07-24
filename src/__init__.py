@@ -1,1 +1,1 @@
-"""自动化板块级金融舆情雷达系统的源码包。"""
+"""Source package for the automated sector-level financial sentiment radar."""

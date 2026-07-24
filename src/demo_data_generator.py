@@ -1,8 +1,9 @@
-"""可复现 demo 新闻数据生成器。
+"""Reproducible demo-news data generator.
 
-该模块不访问网络，使用固定模板生成 132 条过去 30 天内的财经新闻样本，
-覆盖 11 个 GICS 风格板块。生成后会调用文章处理流水线，产出
-`data/demo_articles.csv` 和带规则标签的 `data/processed_articles.csv`。
+This module does not access the network. It uses fixed templates to generate
+132 financial-news samples from the past 30 days across 11 GICS-style sectors.
+It then calls the article-processing pipeline to produce
+`data/demo_articles.csv` and rule-labeled `data/processed_articles.csv`.
 """
 
 from __future__ import annotations
@@ -155,7 +156,7 @@ def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
 
 
 def metric_bundle(sentiment: float, risk_category: str, recency_index: int) -> dict[str, str]:
-    """根据示例情绪和风险类别生成 demo 六维指标。"""
+    """Generate demo six-dimensional metrics from sample sentiment and risk categories."""
     severity = RISK_SEVERITY_WEIGHTS.get(risk_category, 3)
     optimism = clamp(50 + sentiment * 45 + (recency_index % 5 - 2) * 1.4)
     fear = clamp(42 - sentiment * 38 + severity * 4 + (recency_index % 4 - 1.5) * 1.2)

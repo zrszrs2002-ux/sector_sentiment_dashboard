@@ -195,7 +195,7 @@ class EnhancedMetricTests(unittest.TestCase):
             old_row = {
                 "snapshot_date": "2026-01-01",
                 "snapshot_timestamp": "2026-01-01T00:00:00+00:00",
-                "data_source": "真实新闻",
+                "data_source": "Real news",
                 "article_count": 1,
                 "optimism": 1,
             }
@@ -208,7 +208,7 @@ class EnhancedMetricTests(unittest.TestCase):
             with patch.object(daily_snapshots, "SECTOR_DAILY_SCORES_PATH", sector_path), patch.object(
                 daily_snapshots, "MARKET_DAILY_SCORES_PATH", market_path
             ):
-                result = daily_snapshots.write_daily_snapshots(records, "真实新闻")
+                result = daily_snapshots.write_daily_snapshots(records, "Real news")
 
             sectors = pd.read_csv(sector_path)
             markets = pd.read_csv(market_path)

@@ -50,12 +50,12 @@ FULLTEXT_CACHE_PATH = DATA_DIR / "fulltext_cache.json"
 CSV_EXPORT_ENCODING = "utf-8-sig"
 BACKUP_RETENTION_COUNT = 10
 WORKING_SET_DAYS = 30
-# 市场总览 Top Drivers 从近 48 小时开始；事件不足时依次扩至 72/168 小时。
+# Market Overview Top Drivers start with the past 48 hours and expand to 72/168 hours if too few events are found.
 DRIVER_WINDOW_HOURS = 48
 DRIVER_MIN_EVENTS = 5
 RAW_SQLITE_WARNING_MB = 50
 ANNOTATION_SAMPLE_SIZE = 300
-# 固定种子使标注抽样可复现；需要新的样本时再显式更改此配置。
+# A fixed seed makes annotation sampling reproducible; change it explicitly only when a new sample is required.
 ANNOTATION_SAMPLE_SEED = 5720
 # Backward-compatible alias for existing local callers.
 ANNOTATION_RANDOM_SEED = ANNOTATION_SAMPLE_SEED
@@ -77,11 +77,11 @@ FULLTEXT_DRIVER_CANDIDATE_COUNT = 10
 FULLTEXT_REQUEST_TIMEOUT_SECONDS = 10
 FULLTEXT_RATE_LIMIT_SECONDS = 1.0
 FULLTEXT_MIN_CHARS = 200
-# TODO: RSS source_weight 当前为来源类型先验；待人工标注和误差分析后校准。
-# content_level/rescored 将用于第二冲刺“摘要版 vs 正文版”信号对比评估。
+# TODO: RSS source_weight is currently a source-type prior; calibrate it after human annotation and error analysis.
+# content_level/rescored will support the Sprint 2 comparison of summary-based and full-text signals.
 
-# 全句平均对长文本存在中性稀释，正式分数统一用摘要口径保证可比性；
-# 正文口径留档待第二阶段标注数据裁决。
+# Averaging all sentences can dilute long texts toward neutral. Formal scores therefore use summaries for comparability.
+# Full-text scores are retained for a later decision based on Phase 2 annotation data.
 SIMILAR_TITLE_THRESHOLD = 0.9
 SIMILAR_PREFIX_TOKEN_COUNT = 5
 
@@ -120,9 +120,10 @@ METRIC_LABELS = {
 FORMULA_VERSION_BASELINE = "baseline"
 FORMULA_VERSION_ENHANCED = "enhanced"
 
-# Baseline 权重组，一键回退时只需改为 ACTIVE_WEIGHTS = BASELINE_WEIGHTS。
-# Optimism/Fear 仅使用 FinBERT 概率；Uncertainty 使用 0.6 neutral + 0.4 entropy；
-# Attention 历史路径仅用新闻量 ECDF；Disagreement 仅用加权标准差；Risk 保持 0.7 mean + 0.3 P90。
+# Baseline weight group. A one-step rollback requires only ACTIVE_WEIGHTS = BASELINE_WEIGHTS.
+# Optimism/Fear use only FinBERT probabilities; Uncertainty uses 0.6 neutral + 0.4 entropy;
+# the historical Attention path uses only volume ECDF; Disagreement uses only weighted standard deviation;
+# and Risk retains 0.7 mean + 0.3 P90.
 BASELINE_WEIGHTS = {
     "optimism": {"p_positive": 1.0, "b_bull": 0.0, "g_growth": 0.0},
     "fear": {"p_negative": 1.0, "b_bear": 0.0, "s_shock": 0.0},
@@ -132,7 +133,8 @@ BASELINE_WEIGHTS = {
     "risk_intensity": {"weighted_mean": 0.7, "p90": 0.3},
 }
 
-# Enhanced 初始权重均为专家先验；权重敏感性分析由 src/sensitivity_analysis.py 执行，人工标注校准另行开展。
+# Initial Enhanced weights are expert priors. src/sensitivity_analysis.py performs weight sensitivity analysis;
+# calibration against human annotations is conducted separately.
 ENHANCED_WEIGHTS = {
     "optimism": {"p_positive": 0.7, "b_bull": 0.2, "g_growth": 0.1},
     "fear": {"p_negative": 0.7, "b_bear": 0.2, "s_shock": 0.1},
@@ -216,63 +218,71 @@ EXPECTED_ARTICLE_COLUMNS = [
     "processing_error",
 ]
 
-# TODO: 第二阶段计划用人工标注数据对这些权重做校准和敏感性分析，当前为专家先验设定的 baseline 值
+# TODO: Phase 2 will use human annotations to calibrate and analyze these expert-prior baseline values.
 TIME_DECAY_TAU_HOURS = 72
-# TODO: 当前 Attention 使用跨板块横截面近似：在近 7 天窗口内按板块加权新闻量排名分位数计算。
-# TODO: 等真实新闻积累出 30 天以上历史后，应切换为每个板块新闻量相对自身历史分布的 ECDF 分位数。
-# TODO: 这样可避免跨板块直接比较新闻量时低估 Utilities、Materials 等天然新闻较少的板块。
+# TODO: Attention currently uses a cross-sector approximation: rank percentiles of weighted sector news volume
+# over the latest seven-day window.
+# TODO: After at least 30 days of real-news history accumulate, switch to each sector's news-volume ECDF
+# percentile relative to its own history.
+# TODO: This avoids understating naturally low-coverage sectors such as Utilities and Materials.
 ATTENTION_WINDOW_DAYS = 7
 ATTENTION_MIN_HISTORY_DAYS = 30
 ATTENTION_GROWTH_LOOKBACK_DAYS = 7
 KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
-# Fear 技术定义仅表示下行/避险压力：S_shock 使用 panic 反应词，不再把违约、调查、衰退等事件风险重复计入 Fear。
-# 事件风险严重度由 Risk Intensity 独立承载。
-# TODO: 成对距离归一化系数是首版先验，需用人工标注校准。
-DISAGREEMENT_METHOD = "pairwise_distance"  # "legacy_std_mix" 供消融使用。
+# Fear is technically limited to downside/risk-off pressure: S_shock uses panic-reaction terms and no longer
+# double-counts event risks such as defaults, investigations, or recessions.
+# Risk Intensity independently captures event-risk severity.
+# TODO: The pairwise-distance normalization coefficient is a first-version prior requiring annotation calibration.
+DISAGREEMENT_METHOD = "pairwise_distance"  # Use "legacy_std_mix" for ablation.
 DISAGREEMENT_PAIRWISE_NORMALIZATION = 2.0
-# 仅 legacy_std_mix 使用；默认公式没有情绪极性阈值。
+# Used only by legacy_std_mix; the default formula has no sentiment-polarity threshold.
 DISAGREEMENT_POLARITY_THRESHOLD = 0.15
 
-# TODO: 风险密度与严重度系数均为专家先验，第二冲刺需用人工标注校准。
-# 每类风险强度 r_k = min(命中句子数 / 总句子数 * 3, 1)。
+# TODO: Risk-density and severity coefficients are expert priors requiring human-annotation calibration in Sprint 2.
+# Per-category risk intensity: r_k = min(matched sentences / total sentences * 3, 1).
 RISK_KEYWORD_SENTENCE_SCORE_MULTIPLIER = 3.0
 RISK_SEVERITY_SCALE_MAX = 5.0
-# 有界风险联合方式：noisy_or 避免多标签线性相加过早饱和；sum 保留作旧式消融对照。
+# Bounded risk combination: noisy_or avoids premature saturation from linear multi-label addition;
+# sum remains available for legacy ablation.
 RISK_COMBINE = "noisy_or"  # "sum"
 
-# 默认关闭情绪/不确定性压力项，避免 Risk Intensity 与 Fear/Uncertainty 维度耦合。
-# 打开后会回到早期 baseline：风险标签严重度 + 负向情绪压力 + 不确定性压力。
+# Sentiment/uncertainty pressure is disabled by default to avoid coupling Risk Intensity with Fear/Uncertainty.
+# Enabling it restores the early baseline: risk-label severity + negative-sentiment pressure + uncertainty pressure.
 RISK_USE_SENTIMENT_PRESSURE = False
 RISK_SENTIMENT_SEVERITY_WEIGHT = 0.75
 RISK_NEGATIVE_PRESSURE_WEIGHT = 35
 RISK_UNCERTAINTY_PRESSURE_WEIGHT = 10
 
-# FinBERT 默认先读固定 revision 的本地缓存，未命中时自动下载；显式离线时只读缓存。
+# By default, FinBERT first checks the local cache for the pinned revision and downloads only on a cache miss;
+# explicit offline mode reads the cache only.
 SENTIMENT_ENGINE = "finbert"
 SENTIMENT_DEVICE = "auto"
 FINBERT_MODEL_NAME = "ProsusAI/finbert"
 FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 FINBERT_MAX_LENGTH = 128
 
-# 事件聚类只折叠展示，不修改 dedup_factor、agg_weight 或六维指标聚合。
-# 独立报道继续贡献 Attention/情绪；是否对簇内文章降权留到第二冲刺用标注数据评估。
+# Event clustering affects collapsed display only; it does not change dedup_factor, agg_weight,
+# or six-dimensional aggregation.
+# Independent reports continue contributing to Attention and sentiment. Whether to downweight articles within
+# a cluster will be evaluated with annotation data in Sprint 2.
 EVENT_TIME_WINDOW_HOURS = 48
 EVENT_MAX_SPAN_HOURS = 72
-# TODO: 极性护栏阈值为首版先验，需结合事件对标注检查误拆与误合并。
+# TODO: The polarity-guard threshold is a first-version prior requiring event-pair annotation for split/merge errors.
 EVENT_POLARITY_GUARD_THRESHOLD = 0.30
 EVENT_SIMILARITY_ENGINE = "embedding"
 EVENT_EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-# TODO: 以下事件相似度阈值是首版先验值，待第二冲刺用人工标注事件对校准。
+# TODO: The following event-similarity thresholds are first-version priors to be calibrated with annotated
+# event pairs in Sprint 2.
 EVENT_EMBED_THRESHOLD = 0.72
 EVENT_LEXICAL_THRESHOLD = 0.40
-# 无 ticker 的 Unmapped 新闻缺少实体约束，因此采用更严格的文本阈值。
+# Unmapped news without a ticker lacks entity constraints and therefore uses stricter text thresholds.
 EVENT_UNMAPPED_EMBED_THRESHOLD = 0.82
 EVENT_UNMAPPED_LEXICAL_THRESHOLD = 0.55
-# TODO: 媒体覆盖加成同样需要用 Top Drivers 标注数据校准，当前取保守的 15%。
+# TODO: The coverage boost also requires calibration with Top Drivers annotation data; 15% is a conservative prior.
 EVENT_COVERAGE_BOOST = 1.15
 EVENT_EMBED_BATCH_SIZE = 64
 
-# 数据管线语义修订号；用于解释每日快照趋势中的公式/标签断点。
+# Semantic revision of the data pipeline, used to explain formula/label discontinuities in daily snapshot trends.
 PIPELINE_REVISION = "r4"
 
 LLM_ENABLED = True

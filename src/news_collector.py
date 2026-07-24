@@ -1,8 +1,10 @@
-"""RSS 新闻采集模块。
+"""RSS news-collection module.
 
-第一版只读取 RSS 中的标题、摘要、链接、发布时间和来源，不抓新闻正文页面，
-避免反爬、版权和登录限制。抓取结果累积保存到 `data/raw_articles.csv`，
-再复用现有文章处理流水线生成 `data/real_processed_articles.csv`。
+The first version reads only RSS titles, summaries, links, publication times,
+and sources. It does not scrape article pages, avoiding anti-bot, copyright,
+and login restrictions. Results accumulate in `data/raw_articles.csv`, then
+reuse the article-processing pipeline to generate
+`data/real_processed_articles.csv`.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from typing import Any
 try:
     import feedparser
     import requests
-except ImportError:  # pragma: no cover - 运行环境未安装依赖时给中文提示
+except ImportError:  # pragma: no cover - provide a clear message when a runtime dependency is missing
     feedparser = None
     requests = None
 
@@ -86,7 +88,7 @@ RSS_PUBLISHED_AT_ERROR = "published_at: missing/unparseable in RSS; fallback=col
 
 
 def parsed_time_to_utc(value: Any, collected_at: str) -> tuple[str, str]:
-    """把 RSS 发布时间统一转换为 UTC ISO 8601；失败时回落采集时间并返回错误说明。"""
+    """Convert RSS publication time to UTC ISO 8601; fall back to collection time and return an error on failure."""
     if isinstance(value, struct_time):
         parsed = datetime(*value[:6], tzinfo=UTC)
         return parsed.isoformat(timespec="seconds"), ""
@@ -214,7 +216,7 @@ def entry_to_record(entry: Any, feed_config: FeedConfig, collected_at: str) -> d
 
 
 def fetch_feed(feed_config: FeedConfig) -> tuple[list[dict[str, str]], str | None]:
-    """抓取单个 feed；失败时返回错误信息，不抛出到外层中断其他源。"""
+    """Fetch one feed; return an error instead of interrupting other sources on failure."""
     require_dependencies()
     try:
         response = requests.get(
@@ -234,7 +236,7 @@ def fetch_feed(feed_config: FeedConfig) -> tuple[list[dict[str, str]], str | Non
             if strip_html(entry.get("title", "")) and str(entry.get("link", "")).strip()
         ]
         return records, None
-    except Exception as exc:  # noqa: BLE001 - 采集层需要逐源容错
+    except Exception as exc:  # noqa: BLE001 - the collection layer isolates failures by source
         return [], str(exc)
 
 
@@ -265,7 +267,8 @@ def merge_sector_context(left: str, right: str) -> str:
         return right_value
     if not right_value or left_value == right_value:
         return left_value
-    # 多 ticker feed 指向不同板块时，清空单一 sector fallback，避免先抓到的 feed 主导归属。
+    # Clear a single-sector fallback when multiple ticker feeds span different sectors,
+    # preventing the first fetched feed from dominating assignment.
     return ""
 
 
@@ -323,7 +326,7 @@ def read_existing_raw_records() -> list[dict[str, str]]:
 
 
 def merge_raw_records(existing: list[dict[str, str]], fetched: list[dict[str, str]]) -> tuple[list[dict[str, str]], int, int, list[dict[str, str]]]:
-    """累积保存 RSS 记录；重复 URL+标题时合并 ticker/company 语境，不丢弃后续 feed 信息。"""
+    """Append RSS records; merge ticker/company context for duplicate URL-title pairs without losing later feed data."""
     merged_records = [dict(record) for record in existing]
     existing_by_key = {
         raw_record_key(record): record
@@ -348,7 +351,7 @@ def merge_raw_records(existing: list[dict[str, str]], fetched: list[dict[str, st
 
 
 def collect_rss_news(process: bool = True) -> dict[str, Any]:
-    """抓取全部配置的 RSS 源，并刷新真实新闻处理结果。"""
+    """Fetch all configured RSS sources and refresh processed real-news output."""
     collection_started = perf_counter()
     require_dependencies()
     feed_configs = build_feed_configs()

@@ -43,7 +43,7 @@ SENTIMENT_ERROR_FIELDS = [
 
 
 def coverage_summary(df: pd.DataFrame) -> dict[str, int]:
-    """最小覆盖统计；正式评估接口将在后续阶段扩展。"""
+    """Minimal coverage statistics; later phases extend the formal evaluation interface."""
     if df.empty:
         return {
             "article_count": 0,
@@ -76,7 +76,7 @@ def coverage_summary_table(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def output_distribution(df: pd.DataFrame) -> pd.DataFrame:
-    """输出核心数值字段的分布摘要。"""
+    """Return distribution summaries for core numeric fields."""
     numeric_columns = [
         "sentiment_score",
         "p_positive",
@@ -169,7 +169,7 @@ def accuracy_row(
 
 
 def evaluate_annotations(predictions: pd.DataFrame, annotations: pd.DataFrame) -> pd.DataFrame:
-    """基于人工标注 CSV 计算最小准确率指标。"""
+    """Calculate minimal accuracy metrics from human-annotation CSV files."""
     if predictions.empty or annotations.empty or "article_id" not in annotations.columns:
         return pd.DataFrame(columns=["task", "labelled_count", "correct_count", "accuracy"])
 
@@ -440,13 +440,13 @@ def normalize_sentiment_label(value: object) -> str:
     aliases = {
         "positive": "positive",
         "pos": "positive",
-        "正面": "positive",
+        "\u6b63\u9762": "positive",
         "neutral": "neutral",
         "neu": "neutral",
-        "中性": "neutral",
+        "\u4e2d\u6027": "neutral",
         "negative": "negative",
         "neg": "negative",
-        "负面": "negative",
+        "\u8d1f\u9762": "negative",
     }
     return aliases.get(normalized, "")
 
@@ -455,9 +455,27 @@ def normalize_binary_label(value: object) -> bool | None:
     if value is None or pd.isna(value):
         return None
     normalized = str(value).strip().lower()
-    if normalized in {"1", "1.0", "true", "yes", "y", "是", "正确", "合格"}:
+    if normalized in {
+        "1",
+        "1.0",
+        "true",
+        "yes",
+        "y",
+        "\u662f",
+        "\u6b63\u786e",
+        "\u5408\u683c",
+    }:
         return True
-    if normalized in {"0", "0.0", "false", "no", "n", "否", "错误", "不合格"}:
+    if normalized in {
+        "0",
+        "0.0",
+        "false",
+        "no",
+        "n",
+        "\u5426",
+        "\u9519\u8bef",
+        "\u4e0d\u5408\u683c",
+    }:
         return False
     return None
 
@@ -473,7 +491,8 @@ def parse_risk_labels(value: object) -> set[str]:
         for part in re.split(r"[;,|，、]+", normalized)
         if part.strip()
     }
-    return set() if parts <= {"none", "无", "无风险"} else parts - {"none", "无", "无风险"}
+    legacy_none_labels = {"\u65e0", "\u65e0\u98ce\u9669"}
+    return set() if parts <= {"none", *legacy_none_labels} else parts - {"none", *legacy_none_labels}
 
 
 def safe_ratio(numerator: int | float, denominator: int | float) -> float:

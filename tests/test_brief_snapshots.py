@@ -56,7 +56,7 @@ class BriefSnapshotSelectionTests(unittest.TestCase):
             ]
         )
         with patch("src.brief_builder.load_sector_snapshots", return_value=rows):
-            selected = _previous_sector_snapshots("真实新闻", self.snapshot_date)
+            selected = _previous_sector_snapshots("Real news", self.snapshot_date)
 
         self.assertFalse(selected["sector"].duplicated().any())
         selected_by_sector = selected.set_index("sector")
@@ -100,7 +100,7 @@ class BriefSnapshotSelectionTests(unittest.TestCase):
             ]
         )
         with patch("src.brief_builder.load_market_snapshots", return_value=rows):
-            selected = _previous_market_snapshot("真实新闻", self.snapshot_date)
+            selected = _previous_market_snapshot("Real news", self.snapshot_date)
 
         self.assertIsNotNone(selected)
         assert selected is not None

@@ -1,7 +1,7 @@
-"""公司、ticker 与板块映射。
+"""Company, ticker, and sector mapping.
 
-第一版使用 JSON 词典、别名匹配和 ticker regex。若新闻没有明确公司，
-则退回到板块关键词映射。
+The first version uses JSON dictionaries, alias matching, and a ticker regex.
+If an article contains no identifiable company, it falls back to sector-keyword mapping.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def contains_term(text: str, term: str, ignore_case: bool = True) -> bool:
 
 
 def detect_companies(text: str) -> list[dict[str, str]]:
-    """识别文本中出现的公司和 ticker。"""
+    """Identify companies and tickers mentioned in text."""
     normalized_text = normalize_text(text)
     mapping = load_company_mapping()
     matches: list[dict[str, str]] = []
@@ -61,7 +61,7 @@ def detect_companies(text: str) -> list[dict[str, str]]:
 
 
 def infer_sector_from_keywords(text: str) -> str:
-    """在未识别到公司时，根据主题关键词推断板块。"""
+    """Infer a sector from topic keywords when no company is identified."""
     normalized_text = normalize_text(text).lower()
     mapping = load_company_mapping()
     sector_scores: Counter[str] = Counter()
@@ -77,7 +77,7 @@ def infer_sector_from_keywords(text: str) -> str:
 
 
 def map_article(text: str) -> dict[str, str]:
-    """返回文章的公司、ticker、板块和相关性权重。"""
+    """Return an article's company, ticker, sector, and relevance weight."""
     company_matches = detect_companies(text)
     if company_matches:
         sector_counts = Counter(match["sector"] for match in company_matches)

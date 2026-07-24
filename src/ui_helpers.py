@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 from src.config import METRIC_COLUMNS, METRIC_LABELS
 from src.data_loader import DEMO_DATA_LABEL, REAL_DATA_LABEL, load_articles
 
-# 热力图按模式和指标语义着色：绿=乐观，红系=警惕型指标，蓝=关注度。
+# Heatmap colors follow metric semantics: green = optimism, red tones = caution metrics, blue = attention.
 _HEATMAP_COLOR_SCALES = {
     "relative": {
         "optimism": "Greens",
@@ -27,8 +27,8 @@ _HEATMAP_COLOR_SCALES = {
     },
 }
 
-# 六维指标的语义主色，用于柱状图 / 排行榜等可视化，与热力图配色保持一致的直觉：
-# 绿=乐观，红=警惕类（恐惧/不确定/分歧/风险），蓝=关注度。
+# Semantic primary colors for the six metrics in bar charts, rankings, and similar views, aligned with heatmap logic:
+# green = optimism, red = caution metrics (fear/uncertainty/disagreement/risk), blue = attention.
 METRIC_ACCENT_COLORS = {
     "optimism": "#3fb950",
     "fear": "#e5534b",
@@ -40,9 +40,12 @@ METRIC_ACCENT_COLORS = {
 
 
 def get_theme_mode() -> str:
-    """返回当前应使用的图表配色模式：'light' 或 'dark'。
-    读取 Streamlit 原生的 System/Light/Dark 主题开关（右上角"⋮"菜单）；
-    如果检测失败（例如刚切换主题的瞬间），默认按 dark 处理。"""
+    """Return the active chart color mode, either ``light`` or ``dark``.
+
+    Read Streamlit's native System/Light/Dark theme selection from the top-right
+    menu. If detection fails, such as immediately after a theme switch, default
+    to dark mode.
+    """
     try:
         theme_type = st.context.theme.type
     except Exception:
@@ -51,13 +54,13 @@ def get_theme_mode() -> str:
 
 
 def shorten_label(text: object, max_len: int = 16) -> str:
-    """过长的坐标轴文字用省略号截短，避免超出边距导致被硬裁切；完整文字保留在 hover 中。"""
+    """Truncate long axis labels with an ellipsis while retaining full text in hover content."""
     label = str(text or "")
     return label if len(label) <= max_len else label[: max_len - 1].rstrip() + "…"
 
 
 def radar_style(theme_mode: str | None = None) -> dict:
-    """雷达图配色：随亮/暗主题切换，避免深色模式白底、浅色模式黑字看不清的问题。"""
+    """Return radar colors adapted to light/dark themes for readable backgrounds and text."""
     mode = theme_mode or get_theme_mode()
     if mode == "light":
         return {
@@ -90,7 +93,7 @@ def apply_radar_theme(
     angular_tick_size: int = 16,
     height: int = 430,
 ) -> dict:
-    """统一应用雷达图配色/字号，返回使用的样式字典（供设置数据点标注颜色使用）。"""
+    """Apply shared radar colors and typography, returning the style dictionary for point-label colors."""
     style = radar_style(theme_mode)
     fig.update_layout(
         title=dict(text=title, font=dict(color=style["title"], size=18)),
@@ -123,7 +126,7 @@ def apply_radar_theme(
 
 
 def apply_chart_theme(fig: go.Figure, theme_mode: str | None = None) -> None:
-    """给普通 bar/line 等图表套用随主题自适应的透明背景与文字/网格颜色。"""
+    """Apply theme-adaptive transparent backgrounds and text/grid colors to standard bar and line charts."""
     mode = theme_mode or get_theme_mode()
     text_color = "rgba(230,230,230,0.95)" if mode == "dark" else "rgba(25,28,34,0.92)"
     grid_color = "rgba(255,255,255,0.12)" if mode == "dark" else "rgba(0,0,0,0.08)"
@@ -138,14 +141,14 @@ def apply_chart_theme(fig: go.Figure, theme_mode: str | None = None) -> None:
 
 
 def markdown_article_link(title: object, url: object) -> str:
-    """把标题渲染为可点击跳转的 Markdown 链接；无有效链接时退化为纯文本。"""
+    """Render a title as a clickable Markdown link, falling back to plain text when no valid URL exists."""
     label = str(title or "Untitled").replace("[", "\\[").replace("]", "\\]")
     href = str(url or "").strip()
     return f"[{label}]({href})" if href.startswith(("http://", "https://")) else label
 
 
 def sentiment_badge_markdown(score: object, precision: int = 3) -> str:
-    """情绪分徽章：正=绿色，负=红色，接近 0=灰色，用于卡片/列表中直观展示。"""
+    """Return a sentiment badge: green for positive, red for negative, and gray near zero."""
     try:
         value = float(score)
     except (TypeError, ValueError):
@@ -165,8 +168,11 @@ def metric_bar_chart(
     height: int = 260,
     value_range: tuple[float, float] = (0, 100),
 ) -> go.Figure:
-    """通用横向条形图：用于把单行/单列的数据表转成一眼可读的柱状可视化。
-    color 可传单一颜色（所有柱同色）或与 values_by_label 等长的颜色列表（逐条配色）。"""
+    """Build a reusable horizontal bar chart for compact row/column summaries.
+
+    ``color`` may be one color for all bars or a list matching
+    ``values_by_label`` for per-bar colors.
+    """
     full_labels = list(values_by_label.keys())
     labels = [shorten_label(label, 18) for label in full_labels]
     values = [float(v) for v in values_by_label.values()]
@@ -196,7 +202,7 @@ def metric_bar_chart(
 
 
 def count_bar_chart(counts: pd.Series, color: str, height: int = 300, top_n: int = 8) -> go.Figure:
-    """value_counts() 结果的横向条形图：截取前 top_n 项，最多的排最上面；坐标轴文字不截断。"""
+    """Plot the top ``top_n`` value counts horizontally, largest first, without truncating axis text."""
     top_counts = counts.head(top_n).iloc[::-1]
     full_labels = top_counts.index.astype(str).tolist()
     short_labels = [shorten_label(label, 18) for label in full_labels]
@@ -236,7 +242,7 @@ def compact_subheader(text: str, size_rem: float = 1.15) -> None:
 
 
 def load_selected_articles(load_all_history: bool = False):
-    """按侧边栏数据源选择加载文章，并处理真实新闻为空的情况。"""
+    """Load articles selected in the sidebar and handle an empty real-news dataset."""
     source_mode = st.session_state.get("data_source_mode", REAL_DATA_LABEL)
     df = load_articles(source_mode=source_mode, load_all_history=load_all_history)
     if df.empty and source_mode == REAL_DATA_LABEL:
@@ -256,8 +262,9 @@ def url_column_config(label: str = "Link") -> dict:
     return {"url": st.column_config.LinkColumn(label, display_text="Open")}
 
 
-# 单色渐变色阶的端点接近纯白/纯黑，相对模式 min-max 会把最低板块钉在近白端造成刺眼断层；
-# 压缩色带行程让浅端保持可见的浅色。发散色阶（RdYlGn_r）两端为饱和色，不需要压缩。
+# Sequential-scale endpoints approach pure white/black. Relative min-max mapping can pin the lowest sector
+# to near-white and create a harsh visual break, so compress the scale to keep the light end visible.
+# Diverging scales such as RdYlGn_r already have saturated endpoints and need no compression.
 _SEQUENTIAL_SCALES = frozenset({"Greens", "Blues", "Reds"})
 _SEQUENTIAL_BAND = (20.0, 85.0)
 

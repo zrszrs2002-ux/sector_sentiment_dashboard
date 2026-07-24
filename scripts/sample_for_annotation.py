@@ -22,7 +22,9 @@ from src.config import (  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="按 sector×FinBERT 情绪分层生成盲标样本。")
+    parser = argparse.ArgumentParser(
+        description="Generate a blind-labeling sample stratified by sector and FinBERT sentiment."
+    )
     parser.add_argument("--raw-path", type=Path, default=RAW_ARTICLES_PATH)
     parser.add_argument("--processed-path", type=Path, default=REAL_PROCESSED_ARTICLES_PATH)
     parser.add_argument("--output-dir", type=Path, default=ANNOTATION_DIR)
@@ -34,7 +36,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if args.sample_size <= 0:
-        raise ValueError("sample-size 必须大于 0。")
+        raise ValueError("sample-size must be greater than 0.")
     blind, key = build_annotation_files(
         args.raw_path,
         args.processed_path,
@@ -42,9 +44,12 @@ def main() -> int:
         args.sample_size,
         args.seed,
     )
-    print(f"盲标抽样完成：抽取 {len(blind)} 条，随机种子：{args.seed}。")
-    print(f"盲标文件：{args.output_dir / 'annotation_blind.csv'}")
-    print(f"对账 key：{args.output_dir / 'annotation_key.csv'}（请勿提供给标注者，共 {len(key)} 条）")
+    print(f"Blind-labeling sample complete: {len(blind)} rows, random seed: {args.seed}.")
+    print(f"Blind-labeling file: {args.output_dir / 'annotation_blind.csv'}")
+    print(
+        f"Reconciliation key: {args.output_dir / 'annotation_key.csv'} "
+        f"(do not provide it to annotators; {len(key)} rows)"
+    )
     return 0
 
 
